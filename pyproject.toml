@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Eniat"
+version = "0.0.1"
+authors = [
+    { name="GimmeSpoon", email="skcjfdnd1996@naver.com" }
+]
+maintainers = [
+    { name="", email="" }
+]
+description = "Wrapping template for ML libraries including Pytorch, Scikit-learn, etc."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT License"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+    "torch",
+    "mlflow",
+    
+]
+
+[project.urls]
+"Homepage" = "https://github.com/GimmeSpoon/"
+"Bug Tracker" = "https://github.com/GimmeSpoon/"
+

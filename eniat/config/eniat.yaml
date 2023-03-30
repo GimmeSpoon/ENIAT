@@ -1,0 +1,5 @@
+defaults:
+  - override hydra/job_logging: colorlog
+  - override hydra/hydra_logging: colorlog
+  - override hydra/run/dir: ./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}_${task.type}
+  
