@@ -1,5 +1,5 @@
 from typing import TypeVar
-from eniat.learner import BaseLearner
+from eniat.learner.base import BaseLearner
 from eniat.data.course import Course, FullCourse
 from tqdm.auto import tqdm
 from eniat.utils.grader import Grader

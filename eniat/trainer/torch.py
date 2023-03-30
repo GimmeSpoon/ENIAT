@@ -1,7 +1,7 @@
 from typing import TypeVar, Literal, Callable
-from BaseTrainer import BaseTrainer
+from base import BaseTrainer
 from eniat.data.course import Course, FullCourse
-from eniat.learner.torchlearner import TorchLearner
+from eniat.learner.torch import TorchLearner
 from tqdm.auto import tqdm
 import torch
 from torch.utils.data import Dataset, DataLoader, DistributedSampler

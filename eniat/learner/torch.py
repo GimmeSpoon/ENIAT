@@ -1,6 +1,6 @@
 from typing import TypeVar, Generic
 from abc import abstractmethod
-from eniat.learner.baselearner import BaseLearner
+from eniat.learner.base import BaseLearner
 import torch
 from torch import Tensor
 from torch.nn import Module
