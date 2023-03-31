@@ -1,0 +1,34 @@
+task:
+  type: train
+  resume: '/home/user/training_state/221225/'
+  output: '/home/user/training_state/'
+data:
+  data_dir: ['/home/user/data/train', '/home/user/data/validation']
+logger:
+  log_strategy: epoch
+  log_interval: 1
+  output_dir: brr
+distributed:
+  global_rank: 5
+  local_size: 4
+  world_size: 8
+  visible_gpus: [0, 1, 2, 3]
+  master_address: 'localhost'
+  master_port: 12345
+model:
+  structure:
+    layers: 8
+  loss:
+    name: L1Loss
+  optimizer:
+    name: AdamW
+    options:
+      lr: 1-5e
+  scheduler:
+    name: None
+    options:
+      lr_decay: 1.0
+hyperparameters:
+  epoch: 100
+  batch_size: 100
+  

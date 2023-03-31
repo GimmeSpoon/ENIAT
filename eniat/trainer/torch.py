@@ -19,9 +19,8 @@ C = TypeVar('C', bound=Course)
 
 class TorchTrainer(BaseTrainer):
 
-    def __init__(self, *args, **kwargs) -> None:
-        
-        super(TorchTrainer).__init__(*args, **kwargs)
+    def __init__(self, course:C=None, learner:T=None, trainer_conf=None, evaluate_fn=None, logger=None) -> None:
+        super(TorchTrainer).__init__(course, learner, trainer_conf, evaluate_fn, logger)
 
         self.distributed = False
 
@@ -51,20 +50,28 @@ class TorchTrainer(BaseTrainer):
                 current_step += 1
                 step_postfix = {'training_loss' : tr_loss}
                 step_bar.set_postfix(step_postfix)
+                # Step Log
                 if self.conf.log_strategy == 'step' and current_step % self.conf.log_interval == 0:
                     self.logger.log_scalar(step_postfix)
+                # Step Eval
                 if self.conf.eval_strategy == 'step' and current_step % self.conf.eval_interval == 0:
                     self.eval(silent=silent)
+                # Step Save
                 if self.conf.save_strategy == 'step' and current_step % self.conf.save_interval == 0:
                     self.save_checkpoint('step' + current_step)
             self.scheduler.step()
+            # Epoch Log
             if self.conf.log_strategy == 'epoch' and epoch % self.conf.log_interval == 0:
                     self.logger.log_scalar(step_postfix)
+            # Epoch Save
             if self.conf.save_strategy == 'epoch' and epoch % self.conf.save_interval == 0:
                 self.save_checkpoint('epoch' + epoch)
+            # Epoch Eval
             if self.conf.eval_strategy == 'epoch' and epoch % self.conf.eval_interval == 0:
                 self.eval(silent=silent, final=False)
-        self.logger.log(epoch, current_step, tr_loss)
+
+        self.logger.log(epoch, current_step, tr_loss) # Log after done
+        self.save_checkpoint('final')
 
         if self.distributed:
             destroy_process_group()
