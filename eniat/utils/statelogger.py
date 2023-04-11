@@ -1,8 +1,109 @@
 import logging
+from logging import Logger
 from typing import Callable
+from pathlib import Path
+from omegaconf import DictConfig, OmegaConf
 import json
 
-class TotalLogger():
+class StateLogger():
+
+    def __init__(self, name: str, level = 0, conf:DictConfig = None) -> None:
+        self.conf = conf
+        self.console = logging.getLogger(name)
+        self.console.setLevel(level)
+
+    def setLevel(self, level):
+        return self.console.setLevel(level)
+
+    def isEnabledFor(self, level):
+        return self.console.isEnabledFor(level)
+
+    def getEffectiveLevel(self, level):
+        return self.console.getEffectiveLevel(level)
+
+    def addFilter(self, filter):
+        return self.console.addFilter(filter)
+
+    def removeFilter(self, filter):
+        return self.console.removeFilter(filter)
+
+    def filter(self, record):
+        return self.console.filter(record)
+
+    def addHandler(self, hdlr):
+        return self.console.addHandler(hdlr)
+
+    def removeHandler(self, hdlr):
+        return self.console.removeHandler(hdlr)
+    
+    def handle(self, record):
+        return self.console.handle(record)
+    
+    def hasHandlers(self):
+        return self.hasHandlers()
+
+    def findCaller(self, stack_info=False, stacklevel=1):
+        return self.console.findCaller(stack_info, stacklevel)
+
+    def info(self, msg, *args, **kwargs):
+        return self.console.info(msg, *args, **kwargs)
+    
+    def debug(self, msg, *args, **kwargs):
+        return self.console.debug(msg, *args, **kwargs)
+
+    def warning(self, msg, *args, **kwargs):
+        return self.console.warning(msg, *args, **kwargs)
+
+    def error(self, msg, *args, **kwargs):
+        return self.console.error(msg, *args, **kwargs)
+
+    def critical(self, msg, *args, **kwargs):
+        return self.console.critical(msg, *args, **kwargs)
+
+    def log(self, level, msg, *args, **kwargs):
+        return self.console.log(level, msg, *args, **kwargs)
+
+    def exception(self, msg, *args, **kwargs):
+        return self.console.exception(msg, *args, **kwargs)    
+
+    def log_state(self, data:dict):
+        log = json.dumps(data, ensure_ascii=False, indent=2)
+        if self.conf.log.file_log:
+            with open(Path(self.conf.log.dir).joinpath('state', "a")) as f:
+                f.write(log)
+        self.console.info(log)
+
+class TBoardLogger(StateLogger):
+
+    def __init__(self, name: str, conf: DictConfig, file_path: str = None) -> None:
+        super().__init__(name, conf, file_path)
+        self.tb = __import__("torch.utils.tensorboard", fromlist=["torch.utils"])
+        self.tb_logger = self.tb.SummaryWriter("tensorboard", conf.logger.logging_dir)
+
+    def __getattr__(self, __name: str):
+        if __name.startswith('add_'):
+            return getattr(self.tb_logger, __name)
+        return getattr(self.console, __name)
+
+class MFlowLogger(StateLogger):
+
+    def __init__(self, name: str, conf: DictConfig, file_path: str = None, uri:str='localhost') -> None:
+        super().__init__(name, conf, file_path)
+
+        self.mf_logger = __import__("mlflow")
+        self.mf_logger.set_tracking_uri(uri)
+        if autolog:
+            self.mf_logger.autolog(**autolog_options)
+        else:
+            
+            if experiment_id:
+                self.mf_logger.set_experiment(experiment_id=experiment_id)
+            else:
+                self.mf_logger.set_experiment(experiment_name=experiment_name)
+
+            self.mf_logger.start_run(run_id)
+
+class TotalLogger(StateLogger):
 
     console = None
     mf_logger = None

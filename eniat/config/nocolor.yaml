@@ -3,20 +3,17 @@ defaults:
   - log: default_logger
   - trainer: default_trainer
   - learner: default_learner
-  - override hydra/job_logging: colorlog
-  - override hydra/hydra_logging: colorlog
   - _self_
 
-do: # init, 
+init: False
 config: []
-output_dir: ./result
 hydra:
   job:
     name: eniat
   run:
-    dir: ${output_dir}/${now:%Y_%m_%d}/${now:%H_%M_%S}_${learner.name}_${trainer.task}_${hydra.job.override_dirname}
+    dir: ${trainer.env.output_dir}/${now:%Y_%m_%d}/${now:%H_%M_%S}_${learner.name}_${trainer.task}
   sweep:
-    dir: ${output_dir}/${now:%Y-%m-%d}
+    dir: ${trainer.env.output_dir}/${now:%Y-%m-%d}
     subdir: ${now:%H-%M-%S}_${learner.name}_${trainer.task}_${hydra.job.override_dirname}
   output_subdir: ./.conf #config files
   job_logging:

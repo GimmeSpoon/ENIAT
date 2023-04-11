@@ -1,25 +1,46 @@
+from abc import ABCMeta, abstractmethod
 from typing import TypeVar
-from eniat.learner.base import BaseLearner
-from eniat.data.course import Course, FullCourse
+from ..data.course import Course, FullCourse
 from tqdm.auto import tqdm
-from eniat.utils.grader import Grader
+from ..utils.grader import Grader
 
-L = TypeVar('L', bound=BaseLearner)
 D = TypeVar('D', bound=Course)
 
-class BaseTrainer:
+class Learner (metaclass=ABCMeta):
+    r'''Base class for all learners
+    It is basically wrapper class for model such as module in pytorch or estimator in scikit-learn.
+    This class is meant for just simple training and inference features, not for some other things like datastream manipulation.
+    It is because the model could be used for inference only task in the future updates.'''
+
+    @abstractmethod
+    def predict(self, batch):
+        raise NotImplementedError(f"'predict' method of {self.__class__.__name__} class is not implemented.")
+
+    @abstractmethod
+    def fit(self, batch):
+        pass
+
+    @abstractmethod
+    def save_model(self): ...
+
+    @abstractmethod
+    def load_model(self): ...
+
+L = TypeVar('L', bound=Learner)
+
+class Trainer:
     r'''Base class for Trainer
     Trainer gets a data and model pair to train or validate.
     For the purpose, trainer will manage environments for learners.
     Remember, Trainers can have multiple models learned or infer but must have only unique dataset pair.
     '''
-    def __init__(self, course:D=None, learner:L=None, trainer_conf=None, evaluate_fn=None, logger=None) -> None:
+    def __init__(self, course:D=None, learner:L=None, conf=None, evaluate_fn=None, logger=None) -> None:
         self.learner = learner
         if isinstance(course, Course):
             self.course = FullCourse(course)
         else:
             self.course = course
-        self.conf = trainer_conf
+        self.conf = conf
         self.logger = logger
 
         self.eval_fn = evaluate_fn

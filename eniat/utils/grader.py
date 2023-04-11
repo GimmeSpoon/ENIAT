@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, Union
 from numpy import ndarray
 import sklearn.metrics as mt
 
@@ -10,7 +10,7 @@ metric = {
     "hamming" : mt.hamming_loss,
     "hinge" : mt.hinge_loss,
     "jaccard" : mt.jaccard_score,
-    "log" : mt.log,
+    "log" : mt.log_loss,
     "precision" : mt.precision_score,
     "recall" : mt.recall_score,
     "roc_auc" : mt.roc_auc_score,
@@ -27,7 +27,7 @@ metric = {
 class Grader():
 
     @staticmethod
-    def eval(preds, gt, methods:str|Sequence[str], **kwargs):
+    def eval(preds, gt, methods:Union[str, Sequence[str]], **kwargs):
         
         if isinstance(method, str):
             method = [method]

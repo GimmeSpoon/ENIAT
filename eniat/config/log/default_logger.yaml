@@ -1,0 +1,8 @@
+type: StateLogger
+level: 0
+log_strategy: none
+log_interval: 0
+mlflow:
+  enable: False
+tensorboard:
+  enable: False

@@ -1,7 +1,8 @@
 from typing import TypeVar, Generic
 from abc import abstractmethod
-from eniat.learner.base import BaseLearner
+from ..base import Learner
 import torch
+import torch.nn as nn
 from torch import Tensor
 from torch.nn import Module
 from torch.optim import Optimizer
@@ -9,13 +10,16 @@ from torch.optim import Optimizer
 T_co = TypeVar('T_co', covariant=True)
 O = TypeVar('O', bound=Optimizer)
 
-class TorchLearner(BaseLearner, Generic[T_co]):
-    def __init__(self, model:Module, criterion=None, optimizer=None, scheduler=None) -> None:
+class TorchLearner(Learner, Generic[T_co]):
+    def __init__(self, model:Module, criterion=None, optimizer=None, scheduler=None, resume:bool=False, resume_path:str=None) -> None:
         super(TorchLearner).__init__()
         self.model = model
         self.loss_fn = criterion
         self.opt = optimizer
         self.sch = scheduler
+
+        if resume:
+            self.load_model(resume_path)
 
     @abstractmethod
     def fit(self, batch:Tensor, device:int, logger):
@@ -48,3 +52,13 @@ class TorchLearner(BaseLearner, Generic[T_co]):
         else:
             with open(path, 'rb') as f:
                 self.opt.load_state_dict(torch.load(f))
+
+class SupremeLearner (TorchLearner):
+    def __init__(self, model: Module, criterion=None, optimizer=None, scheduler=None, resume: bool = False, resume_path: str = None) -> None:
+        super().__init__(model, criterion, optimizer, scheduler, resume, resume_path)
+
+    def fit(self, batch: Tensor, device: int, logger):
+        return super().fit(batch, device, logger)
+    
+    def predict(self, batch: Tensor, device: int, logger):
+        return super().predict(batch, device, logger)

@@ -1,0 +1,63 @@
+defaults:
+  - eniat
+  - _self_
+
+log:
+  type: StateLogger
+  level: 0
+  log_strategy: epoch
+  log_interval: 1
+  mlflow:
+    enable: True
+    uri:
+  tensorboard:
+    enable: True
+data:
+  Testset:
+    _target_: ./test_data.py
+  evalset:
+    path: ./data/numpy.npy
+    type: npy
+trainer:
+
+  task: train
+  type: torch
+  resume: True
+  resume_dir: '/home/user/training_state/221225/'
+  seed: 666
+
+  # distributed:
+  #   type: DDP
+  #   debug: False
+  #   local_size: 4
+  #   world_size: 8
+  #   master_address: 'localhost'
+  #   master_port: 12345
+  #   env_set:
+  #   env_copy:
+
+  hyperparameters:
+    epoch: 100
+    steps: 1000000
+    batch_size: 100
+
+learner:
+  name: SupremeLearner
+  path:
+  resume: False
+  resume_path:
+  model:
+    name: MyNet
+    path: ./model_test.py
+    options:
+      in_features: 256
+      out_features: 256
+  loss:
+    _target_: torch.nn.L1Loss
+  optimizer:
+    _target_: torch.optim.AdamW
+    lr: 0.01
+  scheduler:
+    _target_: torch.optim.lr_scheduler.LambdaLR
+    lr_lambda: 0.99
+  
