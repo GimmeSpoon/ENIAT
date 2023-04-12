@@ -10,13 +10,13 @@ class DummyLogger():
         self.conf = conf
 
     def info(self, msg, *args, **kwargs):
-        return
+        print(msg)
     
     def debug(self, msg, *args, **kwargs):
-        return
+        print(msg)
 
     def warning(self, msg, *args, **kwargs):
-        return
+        print(msg)
 
     def error(self, msg, *args, **kwargs):
         print(msg)
@@ -25,10 +25,10 @@ class DummyLogger():
         print(msg)
 
     def log(self, level, msg, *args, **kwargs):
-        return
+        print(msg)
 
     def exception(self, msg, *args, **kwargs):
-        return
+        print(msg)
 
     def log_state(self, data:dict):
         return
