@@ -5,6 +5,33 @@ from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
 import json
 
+class DummyLogger():
+    def __init__(self, name, level, conf) -> None:
+        self.conf = conf
+
+    def info(self, msg, *args, **kwargs):
+        return
+    
+    def debug(self, msg, *args, **kwargs):
+        return
+
+    def warning(self, msg, *args, **kwargs):
+        return
+
+    def error(self, msg, *args, **kwargs):
+        return
+
+    def critical(self, msg, *args, **kwargs):
+        return
+
+    def log(self, level, msg, *args, **kwargs):
+        return
+
+    def exception(self, msg, *args, **kwargs):
+        return
+
+    def log_state(self, data:dict):
+        return
 class StateLogger():
 
     def __init__(self, name: str, level = 0, conf:DictConfig = None) -> None:

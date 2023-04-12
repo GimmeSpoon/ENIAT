@@ -8,6 +8,7 @@ resume_dir: './result'
 
 accel: False # PyTorch 2.0 compile
 num_workers: 0
+precision: 16
 
 seed:
 batch_size:
