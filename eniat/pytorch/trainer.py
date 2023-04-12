@@ -92,7 +92,7 @@ class TorchTrainer(Trainer):
         self._save_train_state(timestep)
         self.log.info(f"Checkpoint at {timestep} {unit} saved.")
         
-    def dist(self, local_rank:int, fn, *args) -> None:
+    def dist(self, local_rank:int, fn:str, *args) -> None:
         if self.conf.distributed.debug:
             os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
             os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
@@ -104,7 +104,7 @@ class TorchTrainer(Trainer):
             init_process_group(backend=self.conf.distributed.backend)
             self.learner.model = DDP(self.learner.model).compile() if self.compile else DDP(self.learner.model)
             self.learner.opt = self.get_dist_opt(self.conf.distributed.optimizer, self.learner.model.get_params())
-            fn(self.conf.distributed.local_rank)
+            getattr(self, fn)(self.conf.distributed.local_rank)
         elif self.conf.distributed.type == "DDP":
             print(current_process().name)
             os.environ["MASTER_ADDR"] = self.conf.distributed.master_address
@@ -114,7 +114,7 @@ class TorchTrainer(Trainer):
             init_process_group(backend=self.conf.distributed.backend, world_size=self.conf.distributed.world_size, rank=rank)
             self.learner.model = DDP(self.learner.model).compile() if self.compile else DDP(self.learner.model)
             self.learner.opt = self.get_dist_opt(self.conf.distributed.optimizer, self.learner.model.get_params())
-            return fn(local_rank, *args)
+            return getattr(self, fn)(local_rank, *args)
         else:
             raise ValueError("The type of distributed config must be one of the following literals: ['torchrun', 'DDP', 'none']")
 
@@ -126,8 +126,8 @@ class TorchTrainer(Trainer):
                 if self._dist:
                     if self.conf.distributed.type == "DDP":
                         if current_process().name == "MainProcess":
-                            spawn(self.dist, (fn, *args),nprocs=self.conf.distributed.local_size, join=True)
-                    return self.dist(os.environ['LOCAL_RANK'], fn, *args)
+                            spawn(self.dist, (fn.__name__, *args),nprocs=self.conf.distributed.local_size, join=True)
+                    return self.dist(os.environ['LOCAL_RANK'], fn.__name__, *args)
                 else:
                     return fn(*args)
         return wrapper
