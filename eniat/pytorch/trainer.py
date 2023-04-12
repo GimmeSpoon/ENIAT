@@ -93,6 +93,7 @@ class TorchTrainer(Trainer):
         self.log.info(f"Checkpoint at {timestep} {unit} saved.")
         
     def dist(self, local_rank:int, fn:str, *args) -> None:
+        self.log.debug("Spawn entry entered")
         if self.conf.distributed.debug:
             os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
             os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
