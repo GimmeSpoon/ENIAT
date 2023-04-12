@@ -19,10 +19,10 @@ class DummyLogger():
         return
 
     def error(self, msg, *args, **kwargs):
-        return
+        print(msg)
 
     def critical(self, msg, *args, **kwargs):
-        return
+        print(msg)
 
     def log(self, level, msg, *args, **kwargs):
         return
