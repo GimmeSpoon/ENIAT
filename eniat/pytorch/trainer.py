@@ -3,6 +3,7 @@ from ..base import Trainer
 from ..data.course import Course, FullCourse
 from .learner import TorchLearner
 from tqdm.auto import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 import torch
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torch.multiprocessing import spawn
@@ -13,26 +14,27 @@ import torch.distributed.algorithms.model_averaging.averagers as averagers
 import os
 import random
 import numpy as np
+from multiprocessing import current_process
 
 T = TypeVar('T', bound=TorchLearner)
-C = TypeVar('C', Course, FullCourse)
+C = TypeVar('C', bound=FullCourse)
 
 class TorchTrainer(Trainer):
 
-    def __init__(self, course:C=None, learner:T=None, conf=None, evaluate_fn:Callable=None, logger=None) -> None:
-        super(TorchTrainer, self).__init__(course, learner, conf, evaluate_fn, logger)
-
-        self.course = course
-
-        self.learner = learner
-        self.conf = conf
-        self.eval_fn = evaluate_fn
-        self.log = logger
+    def __init__(self, course:C=None, learner:T=None, conf=None, grader=None, logger=None) -> None:
+        super(TorchTrainer, self).__init__(course, learner, conf, grader, logger)
 
         if not self.conf.distributed or self.conf.distributed.type == 'none':
             self._dist = False
         else: # distributed learning set
             self._dist = True
+
+        self.seed = conf.seed
+        self.unit = conf.unit
+        self.save_interval = conf.save_interval
+        self.compile = conf.accel
+        self.init_step = conf.init_step
+        self.max_step = conf.max_step
 
     def rand_all(self, seed):
         if self._dist:
@@ -45,74 +47,127 @@ class TorchTrainer(Trainer):
         np.random.seed(seed)
         random.seed(seed)
 
-    def save_checkpoint(self, dir:str):
-        self.learner.save_all(os.path.join(self.io.output_dir, dir + '/model.pt'), os.path.join(self.io.output_dir, dir + '/optimizer.pt'))
+    def get_rand_state(self) -> dict:
+        return {
+            'cuda' : torch.cuda.get_rng_state_all() if self._dist else torch.cuda.get_rng_state(),
+            'torch' : torch.get_rng_state(),
+            'numpy' : np.random.state(),
+            'random' : random.getstate()
+        }
+    
+    def set_rand_state(self, state:dict) -> None:
+        if self._dist:
+            torch.cuda.set_rng_state_all(state['cuda'])
+        else:
+            torch.cuda.set_rng_state(state['cuda'])
+        torch.set_rng_state(state['torch'])
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        np.random.set_state(state['numpy'])
+        random.setstate(state['random'])
 
-    def dist(self, fn, *args) -> None:
-        self.learner.set_model(DDP(self.learner.model), self.learner.model_name + '(DDP)')
-        self.learner.set_optimizer(self.get_dist_opt(self.task.dist_optimizer, self.learner.get_params()))
+    def resume_training_state(self, path:str) -> None:
+        resumed = torch.load(path)
+        self.unit = resumed['unit']
+        self.set_rand_state(resumed['rng_state'])
+        self.init_step = resumed['timestep']
+        self.max_step = resumed['maxstep']
+
+    def _save_model(self, timestep:int=None) -> None:
+        torch.save(self.learner.model.state_dict(), os.path.join(os.getcwd(), f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
+
+    def _save_train_state(self, timestep:int) -> None:
+        train_state = self.learner.get_optimizer().state_dict()['optimizer']
+        train_state['unit'] = self.unit
+        train_state['rng_state'] = self.get_rand_state()
+        train_state['timestep'] = timestep
+        train_state['maxstep'] = self.max_step
+        train_state['distributed'] = self._dist
+        torch.save(train_state, os.path.join(os.getcwd(), f'checkpoints/state_{timestep}.cpt'))
+
+    def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
+        if not force and (self.unit != unit or timestep % self.save_interval()):
+            return
+        self._save_model(timestep)
+        self._save_train_state(timestep)
+        self.log.info(f"Checkpoint at {timestep} {unit} saved.")
+        
+    def dist(self, local_rank:int, fn, *args) -> None:
         if self.conf.distributed.debug:
             os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
             os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-        if self.distributed.type == "torchrun":
+        if self.conf.distributed.type == "torchrun":
             local_size = self.conf.distributed.local_size = int(os.environ['LOCAL_WORLD_SIZE'])
             self.conf.distributed.local_rank = int(os.environ['LOCAL_RANK'])
             self.conf.distributed.global_rank = int(os.environ['RANK'])
             self.conf.distributed.world_size = int(os.environ['WORLD_SIZE'])
-            if __name__ == "__main__":
-                init_process_group(backend=self.conf.backend)
-                fn(self.conf.distributed.local_rank)
-        elif self.distributed.type == "DDP":
-            os.environ["MASTER_ADDR"] = self.conf.master_address
-            os.environ["MASTER_PORT"] = self.conf.master_port
-            if __name__ == "__main__":
-                spawn(fn, args, local_size, join=True)
+            init_process_group(backend=self.conf.distributed.backend)
+            self.learner.model = DDP(self.learner.model).compile() if self.compile else DDP(self.learner.model)
+            self.learner.opt = self.get_dist_opt(self.conf.distributed.optimizer, self.learner.model.get_params())
+            fn(self.conf.distributed.local_rank)
+        elif self.conf.distributed.type == "DDP":
+            print(current_process().name)
+            os.environ["MASTER_ADDR"] = self.conf.distributed.master_address
+            os.environ["MASTER_PORT"] = self.conf.distributed.master_port
+            print(local_rank)
+            rank = self.conf.distributed.global_rank + local_rank
+            init_process_group(backend=self.conf.distributed.backend, world_size=self.conf.distributed.world_size, rank=rank)
+            self.learner.model = DDP(self.learner.model).compile() if self.compile else DDP(self.learner.model)
+            self.learner.opt = self.get_dist_opt(self.conf.distributed.optimizer, self.learner.model.get_params())
+            return fn(local_rank, *args)
         else:
             raise ValueError("The type of distributed config must be one of the following literals: ['torchrun', 'DDP', 'none']")
 
     def distributed (fn:Callable):
         def wrapper(*args):
-            if (self:=args[0])._dist:
-                return self.dist(fn, *args)
-            else:
-                self.loader = DataLoader()
-                return fn(*args)
+            self = args[0]
+            self.loader = self.get_loader(fn.__name__)
+            with logging_redirect_tqdm():
+                if self._dist:
+                    if self.conf.distributed.type == "DDP":
+                        if current_process().name == "MainProcess":
+                            spawn(self.dist, (fn, *args),nprocs=self.conf.distributed.local_size, join=True)
+                    return self.dist(os.environ['LOCAL_RANK'], fn, *args)
+                else:
+                    return fn(*args)
         return wrapper
+    
+    @staticmethod
+    def to_tensor(batch):
+        if isinstance(batch, list):
+            for data in batch:
+                if isinstance(data, np.ndarray):
+                    data = torch.from_numpy(data)
+        elif isinstance(batch, np.ndarray):
+            batch = torch.from_numpy(data)
+        return batch
 
     @distributed
-    def fit(self, device:int=0, silent:bool=False, seed=None):
-        if seed:
-            self.rand_all(seed)
-
+    def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
+        print(current_process().name)
         current_step = 0
-        for epoch in (epoch_bar:=tqdm(range(self.conf.hyperparameters.epoch), desc='Training', unit='epoch', position=0, leave=False, disable=silent)):
-            for batch in (step_bar:=tqdm(self.course, desc='Batch', unit='step', position=1, leave=False, disable=silent)):
-                tr_loss = self.learner.fit(batch)
-                current_step += 1
-                step_postfix = {'training_loss' : tr_loss.item()}
+        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
+            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent)):
+                batch = self.to_tensor(batch)
+                tr_loss = self.learner.fit(batch, device, self.log)
+                self.learner.opt.zero_grad()
+                tr_loss.backward()
+                self.learner.opt.step()
+                step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
                 step_bar.set_postfix(step_postfix)
                 # Step Log
-                if self.conf.log_strategy == 'step' and current_step % self.conf.log_interval == 0:
-                    self.logger.log_scalar('training loss', tr_loss.item(), current_step)
+                self.log.log_state(step_postfix)
                 # Step Eval
-                if self.conf.eval_strategy == 'step' and current_step % self.conf.eval_interval == 0:
-                    self.eval(silent=silent)
+                #self.grader.compute()
                 # Step Save
-                if self.conf.save_strategy == 'step' and current_step % self.conf.save_interval == 0:
-                    self.save_checkpoint('step' + current_step)
-            self.scheduler.step()
-            # Epoch Log
-            if self.conf.log_strategy == 'epoch' and epoch % self.conf.log_interval == 0:
-                    self.logger.log_scalar('training loss', tr_loss.item(), epoch)
-            # Epoch Save
-            if self.conf.save_strategy == 'epoch' and epoch % self.conf.save_interval == 0:
-                self.save_checkpoint('epoch' + epoch)
-            # Epoch Eval
-            if self.conf.eval_strategy == 'epoch' and epoch % self.conf.eval_interval == 0:
-                self.eval(silent=silent, final=False)
+                if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                    self._save_checkpoint('step' + current_step)
+                current_step += 1
+            self.learner.epoch()
+            self.log.info(f"Epoch {epoch} finished")
+            #self.log.log_state()
 
-        self.logger.log(epoch, current_step, tr_loss) # Log after done
-        self.save_checkpoint('final')
+        self._save_checkpoint('final')
 
         if self.distributed:
             destroy_process_group()
@@ -164,6 +219,7 @@ class TorchTrainer(Trainer):
         if method == 'postlocal':
             return PostLocalSGDOptimizer(self.learner.opt, averagers.PeriodicModelAverager(**kwargs))
         
-    def get_loader(self, dataset:Literal['train', 'eval', 'predict']) -> DataLoader:
-        return DataLoader(getattr(self, dataset + 'set'), batch_size=self.task.batch_size, num_workers=self.task.num_workers) if not self.distributed else \
-        DataLoader(getattr(self, dataset + 'set'), batch_size=self.task.batch_size,  num_workers=self.task.num_workers, sampler=DistributedSampler(self.dataset, self.world_size, self.global_rank))
+    def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
+        dataset = self.course.get_dataset(dataset)
+        return DataLoader(dataset, batch_size=self.conf.batch_size, num_workers=self.conf.num_workers) if not self.distributed else \
+        DataLoader(dataset, batch_size=self.conf.batch_size,  num_workers=self.conf.num_workers, sampler=DistributedSampler(dataset, self.conf.distributed.world_size, self.conf.distributed.global_rank))

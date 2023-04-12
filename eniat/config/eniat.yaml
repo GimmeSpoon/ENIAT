@@ -3,12 +3,14 @@ defaults:
   - log: default_logger
   - trainer: default_trainer
   - learner: default_learner
+  - grade: default_grade
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
   - _self_
 
-do: # init, 
+do: # init, help
 config: []
+silent: False
 output_dir: ./result
 hydra:
   job:

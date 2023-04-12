@@ -1,6 +1,6 @@
 import logging
 from logging import Logger
-from typing import Callable
+from typing import Callable, Literal
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
 import json
@@ -11,6 +11,23 @@ class StateLogger():
         self.conf = conf
         self.console = logging.getLogger(name)
         self.console.setLevel(level)
+        self.unit = conf.unit
+        self.interval = conf.interval
+
+    def _stepfilter(fn:Callable) -> Callable:
+        def wrapper(self, data:dict, force:bool=False):
+            if 'epoch' in data:
+                timestep = data['epoch']
+                unit = 'epoch'
+            elif 'step' in data:
+                timestep = data['step']
+                unit = 'step'
+            else:
+                raise ValueError("Dict 'data' must contain timestep variable when logging states.")
+            if not force and (self.unit != unit or timestep % self.interval):
+                return
+            return fn(data)
+        return wrapper
 
     def setLevel(self, level):
         return self.console.setLevel(level)
@@ -66,6 +83,7 @@ class StateLogger():
     def exception(self, msg, *args, **kwargs):
         return self.console.exception(msg, *args, **kwargs)    
 
+    @_stepfilter
     def log_state(self, data:dict):
         log = json.dumps(data, ensure_ascii=False, indent=2)
         if self.conf.log.file_log:

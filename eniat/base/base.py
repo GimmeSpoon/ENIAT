@@ -21,9 +21,6 @@ class Learner (metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def save_model(self): ...
-
-    @abstractmethod
     def load_model(self): ...
 
 L = TypeVar('L', bound=Learner)
@@ -34,16 +31,12 @@ class Trainer:
     For the purpose, trainer will manage environments for learners.
     Remember, Trainers can have multiple models learned or infer but must have only unique dataset pair.
     '''
-    def __init__(self, course:D=None, learner:L=None, conf=None, evaluate_fn=None, logger=None) -> None:
+    def __init__(self, course:D=None, learner:L=None, conf=None, grader=None, logger=None) -> None:
+        self.course = course
         self.learner = learner
-        if isinstance(course, Course):
-            self.course = FullCourse(course)
-        else:
-            self.course = course
         self.conf = conf
-        self.logger = logger
-
-        self.eval_fn = evaluate_fn
+        self.log = logger
+        self.grader = grader
 
     def fit(self, silent:bool=False):
         self.course.select('train')
@@ -58,7 +51,7 @@ class Trainer:
     def eval(self):
         self.course.select('eval')
         preds, gt = self.learner.eval(batch=self.course.next())
-        if self.eval_fn:
-            return self.eval_fn(preds, gt)
+        if self.grader:
+            return self.grader(preds, gt)
         else:
             return Grader.eval(preds, gt)

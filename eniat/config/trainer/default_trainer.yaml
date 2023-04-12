@@ -1,27 +1,32 @@
 task: none
 type: auto
 
+sub_dir: './checkpoint'
 resume: False
+resume_step: 0
 resume_dir: './result'
 
 accel: False # PyTorch 2.0 compile
+num_workers: 0
 
-seed: 666
+seed:
+batch_size:
+
+init_step: 0
+max_step: 0
+unit: epoch # ['epoch', 'step']
+save_interval: 0
 
 distributed:
   type: none
   debug: False
-  local_rank:
-  global_rank:
+  local_rank: 0
+  global_rank: 0
   local_size: 1
   world_size: 1
   master_address: 'localhost'
   maste_port: 8888
+  backend:
+  optimizer: zero # ['zero', 'postlocal']
   env_set: 
   env_copy:
-  
-hyperparameters:
-  epoch: 1
-  steps: 0
-  batch_size: 0
-  seed: 666

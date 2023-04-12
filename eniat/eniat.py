@@ -29,6 +29,21 @@ def dynamic_load(name:str, path:str):
     _mod, _bn = dynamic_import(path, name)
     return getattr(_mod, name), _bn
 
+def _conf_instantiate(options:DictConfig):
+    if not options:
+        return None
+    if '_target_' in options:
+        return instantiate(options)
+    elif 'path' in options and 'cls' in options:
+        _cls, _bn = dynamic_load(options.cls, options.path)
+        options = OmegaConf.to_container(options)
+        options.pop('_target_', None)
+        options.pop('path', None)
+        options.pop('cls', None)
+        return _cls(**options)
+    else:
+        raise ValueError(f"Instantiation failed. Current config is not valid: {options}")
+
 def init_conf(job_name:str="eniat"):
     # Global Config
     with initialize(version_base=version_base, config_path=global_config_path, job_name=job_name):
@@ -73,13 +88,14 @@ def eniat(cfg: DictConfig) -> None:
         _courses = FullCourse()
         log.info("Loading data...")
         for label in cfg.data:
-            if '_target_' in cfg.data[label]:
-                _cls, _bn = dynamic_load(label, cfg.data[label]._target_)
-                _courses.append(course=Course(label, data=instantiate(cfg.data[label], _target_= _bn + '.' + _cls.__name__)))
-                log.info(f"Data(:{label}) is loaded.")
+            if 'cls' in cfg.data[label]:
+                #_cls, _bn = dynamic_load(label, cfg.data[label]._target_)
+                #_courses.append(course=Course(cfg.trainer.task, data=instantiate(cfg.data[label], _target_= _bn + '.' + _cls.__name__)))
+                _courses.append(Course(label ,_conf_instantiate(cfg.data[label])))
+                log.info(f"'{label}' data is loaded.")
             elif 'path' in cfg.data[label]:
                 _courses.append(course=Course(label, data=batch_load(cfg.data[label]['path'], cfg.data[label].type)))
-                log.info(f"Data(:{label}) is loaded.")
+                log.info(f"'{label}' data is loaded.")
             else:
                 log.warning(f"Data(:{label}) is not loaded because the path of data is not specified.")
         if not len(_courses):
@@ -87,28 +103,16 @@ def eniat(cfg: DictConfig) -> None:
             return
         log.info('Loaded dataset info\n' + _courses.__repr__())
 
-        # MODEL LOAD
-        #_cls = None
-        #if cfg.learner.path:
-        #    # Dynamic load from a path of file contianing model architectures
-        #    _cls, _bn = dynamic_load(cfg.learner.name, cfg.learner.path)
-
         # Torch
         if cfg.trainer.type == "torch":
 
             log.info(f"Task based on PyTorch.")
             # instantiate learner components
-            # model
-            if '_target_' in cfg.learner.model:
-                model = instantiate(cfg.learner.model)
-            elif 'path' in cfg.learner.model and 'name' in cfg.learner.model:
-                _mod, _bn = dynamic_import(cfg.learner.model.path, cfg.learner.model.name)
-                print(_mod)
-                model = getattr(_mod, cfg.learner.model.name)(**cfg.learner.model.options)
-            else:
-                raise ValueError("'_target_' or 'path' of the model must be provided.")
-            #model = instantiate(cfg.learner.model, )#_target_=f"{_bn}.{cfg.learner.name}") #if _cls else instantiate(cfg.learner.model)
+
+            # Model Load
+            model = _conf_instantiate(cfg.learner.model)
             log.info("Model loaded...")
+
             if not cfg.learner.resume:
                 log.warning("'resume' is set to False. The model will be initialized without loading a checkpoint.")
             # loss
@@ -133,9 +137,9 @@ def eniat(cfg: DictConfig) -> None:
             # instantiate learner
             if 'path' in cfg.learner and cfg.learner.path:
                 _mod, _bn = dynamic_import(cfg.learner.path)
-                learner = getattr(_mod, cfg.learner.name)(model, loss, optim, schlr, cfg.learner.resume, cfg.learner.resume_path)
+                learner = getattr(_mod, cfg.learner.cls)(model, loss, optim, schlr, cfg.learner.resume, cfg.learner.resume_path)
             else:
-                learner = getattr(import_module('.pytorch.learner', 'eniat'), cfg.learner.name)(model, loss, optim, schlr, cfg.learner.resume, cfg.learner.resume_path)
+                learner = getattr(import_module('.pytorch.learner', 'eniat'), cfg.learner.cls)(model, loss, optim, schlr, cfg.learner.resume, cfg.learner.resume_path)
             if learner:
                 log.info("Learner instance created.")
             # instantiate trainer

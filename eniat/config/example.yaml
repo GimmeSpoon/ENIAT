@@ -5,18 +5,21 @@ defaults:
 log:
   type: StateLogger
   level: 0
-  log_strategy: epoch
-  log_interval: 1
+  unit: epoch
+  interval: 1
   mlflow:
     enable: True
     uri:
   tensorboard:
     enable: True
 data:
-  Testset:
-    _target_: ./test_data.py
-  evalset:
-    path: ./data/numpy.npy
+  fit:
+    path: ./test_data.py
+    cls: Testset
+  eval:
+    path:
+      - ./data/numpy.npy
+      - ./data/numpy2.npy
     type: npy
 trainer:
 
@@ -24,34 +27,34 @@ trainer:
   type: torch
   resume: True
   resume_dir: '/home/user/training_state/221225/'
+
   seed: 666
+  batch_size: 1000
 
-  # distributed:
-  #   type: DDP
-  #   debug: False
-  #   local_size: 4
-  #   world_size: 8
-  #   master_address: 'localhost'
-  #   master_port: 12345
-  #   env_set:
-  #   env_copy:
+  max_step: 100
+  unit: epoch
 
-  hyperparameters:
-    epoch: 100
-    steps: 1000000
-    batch_size: 100
+  distributed:
+     type: DDP
+     debug: False
+     local_size: 1
+     world_size: 1
+     master_address: 'localhost'
+     master_port: '12345'
+     backend: nccl
+     env_set:
+     env_copy:
 
 learner:
-  name: SupremeLearner
+  cls: SupremeLearner
   path:
   resume: False
   resume_path:
   model:
-    name: MyNet
+    cls: MyNet
     path: ./model_test.py
-    options:
-      in_features: 256
-      out_features: 256
+    in_features: 256
+    out_features: 256
   loss:
     _target_: torch.nn.L1Loss
   optimizer:

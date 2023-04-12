@@ -4,16 +4,26 @@ import pickle as pk
 
 T_co = TypeVar('T_co', covariant=True)
 
-def batch_load(path:Union[str, Sequence[str]], type:Literal['csv', 'npy', 'pkl']):
-    if isinstance(path, str):
+def batch_load(paths:Union[str, Sequence[str]], type:Literal['csv', 'npy', 'pkl']):
+
+    def np_load(path:str, type:Literal['csv', 'npy', 'pkl']):
         if type == 'csv':
             return np.loadtxt(path, delimiter=',')
         if type == 'npy':
             return np.load(path)
         if type == 'pkl':
             return np.load(path, allow_pickle=True)
+        
+    if isinstance(paths, str):
+        return np_load(paths, type)
     else:
-        raise NotImplementedError("sorry")
+        ret = None
+        for path in paths:
+            stack = np_load(path, type)
+            if ret is None:
+                ret = np.empty((0, *stack.shape[1:]))
+            ret = np.concatenate((ret, stack))
+        return ret
 
 class Course:
     def __init__(self, label:str, data:T_co, target:T_co=None, transform:Callable = None) -> None:
@@ -33,9 +43,12 @@ class Course:
     
     def __getitem__ (self, idx:int) -> T_co:
         if self.transform:
-            x = self.transform(self.data)
+            x = self.transform(self.data[idx])
+        else:
+            x = self.data[idx]
+
         if self.target:
-            return x, self.target
+            return x, self.target[idx]
         else:
             return x
         
@@ -67,7 +80,10 @@ class FullCourse():
                 raise ValueError(f"The size of labels, data, targets, and transforms must match.")
             for label, data, target, transform in zip(labels, datas, targets, transforms if transforms else [None * len(labels)]):
                 self.courses[label] = Course(label, data, target, transform)
-        
+
+    def get_dataset(self, label:str):
+        return self.courses[label]    
+    
     def append(self, course:Course = None, label:str = None, data = None):
         if course:
             self.courses[course.label] = course

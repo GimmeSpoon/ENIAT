@@ -1,8 +1,11 @@
-from typing import Sequence, Union
+from typing import Sequence, Union, TypeVar, Callable
 from numpy import ndarray
 import sklearn.metrics as mt
+from omegaconf import DictConfig
 
-metric = {
+T_co = TypeVar('T_co', covariant=True)
+
+sk_metric = {
     "acc" : mt.accuracy_score,
     "f1" : mt.f1_score,
     "top_k_acc" : mt.top_k_accuracy_score,
@@ -24,23 +27,49 @@ metric = {
     "mdae" : mt.median_absolute_error,
 }
 
-class Grader():
-
-    @staticmethod
-    def eval(preds, gt, methods:Union[str, Sequence[str]], **kwargs):
+def sk_eval(preds, gt, methods:Union[str, Sequence[str]], **kwargs):
         
-        if isinstance(method, str):
-            method = [method]
+    if isinstance(method, str):
+        methods = [method]
 
-        if not isinstance(preds, ndarray):
-            preds = preds.numpy()
+    if not isinstance(preds, ndarray):
+        preds = preds.numpy()
 
-        if not isinstance(gt, ndarray):
-            gt = gt.numpy()
+    if not isinstance(gt, ndarray):
+        gt = gt.numpy()
 
-        ret = []
+    ret = []
 
-        for method in methods:
-            ret.append(metric[method](gt, preds, **kwargs))
+    for method in methods:
+        ret.append(sk_metric[method](gt, preds, **kwargs))
 
-        return ret
+    return ret
+
+class Grader():
+    def __init__(self, conf:DictConfig, methods:Union[Callable, Sequence[Callable]]) -> None:
+        self.unit = conf.unit
+        self.interval = conf.interval
+        if isinstance(methods, Callable):
+            methods = [methods]
+        self.methods = list(methods)
+
+    def append_metric(self, method:Callable):
+        self.methods.append(method)
+
+    def _stepfilter(fn:Callable) -> Callable:
+        def wrapper(self, pred, gt, timestep:int, unit:str, force:bool=False):
+            if not force and (self.unit != unit or timestep % self.interval):
+                return
+            return fn(self, pred, gt)
+        return wrapper
+
+    @_stepfilter
+    def compute(self, prediction:T_co, ground_truth:T_co) -> dict:
+        result = {}
+        for method in self.methods:
+            result[method.__name__]=method(prediction, ground_truth)
+        return result
+
+    @_stepfilter
+    def __call__(self, prediction:T_co, ground_truth:T_co):
+        self.compute(prediction, ground_truth)

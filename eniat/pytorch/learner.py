@@ -29,36 +29,48 @@ class TorchLearner(Learner, Generic[T_co]):
     def predict(self, batch:Tensor, device:int, logger):
         pass
 
-    def save_model(self, path:str) -> None:   
-        torch.save(self.model.state_dict(), path)
+    def epoch(self):
+        self.sch.step()
 
-    def save_optimizer(self, path:str) -> None:
-        torch.save(self.opt.state_dict(), path)
-    
-    def save_all (self, model_path:str, optimizer_path:str) -> None:
-        self.save_model(model_path)
-        self.save_optimizer(optimizer_path)
-
-    def load_model(self, path:str, state=None) -> None:
+    def load_model(self, state=None, path:str=None) -> None:
         if state:
             self.model.load_state_dict(state)
         else:
             with open(path, 'rb') as f:
                 self.model.load_state_dict(torch.load(f))
 
-    def load_optimizer(self, path:str, state=None) -> None:
+    def load_optimizer(self, state=None, path:str=None) -> None:
         if state:
             self.opt.load_state_dict(state)
         else:
             with open(path, 'rb') as f:
                 self.opt.load_state_dict(torch.load(f))
 
+    @property
+    def get_model(self):
+        return self.model
+
+    @property
+    def get_optimizer(self):
+        return self.opt
+    
+    @property
+    def get_state(self):
+        return {
+            'model': self.model.state_dict(),
+            'optimizer': self.op.state_dict() if self.opt else None
+        }
+
 class SupremeLearner (TorchLearner):
     def __init__(self, model: Module, criterion=None, optimizer=None, scheduler=None, resume: bool = False, resume_path: str = None) -> None:
         super().__init__(model, criterion, optimizer, scheduler, resume, resume_path)
 
     def fit(self, batch: Tensor, device: int, logger):
-        return super().fit(batch, device, logger)
+        x, y = batch
+        x, y = x.to(device), y.to(device)
+        model = self.model.to(device)
+        pred = model(x)
+        return self.loss_fn(pred, y)
     
     def predict(self, batch: Tensor, device: int, logger):
         return super().predict(batch, device, logger)
