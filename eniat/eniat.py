@@ -30,6 +30,7 @@ def dynamic_load(name:str, path:str):
     return getattr(_mod, name), _bn
 
 def _conf_instantiate(options:DictConfig):
+    print("_conf_instantiate()")
     if not options:
         return None
     if '_target_' in options:
@@ -40,6 +41,7 @@ def _conf_instantiate(options:DictConfig):
         options.pop('_target_', None)
         options.pop('path', None)
         options.pop('cls', None)
+        print(options)
         return _cls(**options)
     else:
         raise ValueError(f"Instantiation failed. Current config is not valid: {options}")
@@ -89,8 +91,6 @@ def eniat(cfg: DictConfig) -> None:
         log.info("Loading data...")
         for label in cfg.data:
             if 'cls' in cfg.data[label]:
-                #_cls, _bn = dynamic_load(label, cfg.data[label]._target_)
-                #_courses.append(course=Course(cfg.trainer.task, data=instantiate(cfg.data[label], _target_= _bn + '.' + _cls.__name__)))
                 _courses.append(Course(label ,_conf_instantiate(cfg.data[label])))
                 log.info(f"'{label}' data is loaded.")
             elif 'path' in cfg.data[label]:
