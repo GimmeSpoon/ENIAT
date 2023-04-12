@@ -12,6 +12,8 @@ from shutil import copytree, ignore_patterns
 from .data.course import Course, FullCourse, batch_load
 from .utils.cli import introduce, help
 
+from torch.distributed.elastic.multiprocessing.errors import record
+
 version_base = None
 
 global_config_path = os.path.abspath(pkg_resources.resource_filename(__name__, 'config'))
@@ -65,6 +67,7 @@ def _merge_conf_by_path(conf:DictConfig, paths:Union[str,Sequence[str]]) -> Dict
 
     return conf
 
+@record
 @hydra.main(version_base=version_base, config_path=global_config_path, config_name='eniat')
 def eniat(cfg: DictConfig) -> None:
 
