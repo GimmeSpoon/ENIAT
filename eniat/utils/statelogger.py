@@ -41,6 +41,7 @@ class StateLogger():
         def __enter__(self):
             self.prev_silent = StateLogger.__silent
             StateLogger.__silent = True
+            return self
 
         def __exit__(self, exc_type, exc_val, exc_tb):
             StateLogger.__silent = self.prev_silent

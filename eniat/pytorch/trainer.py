@@ -220,7 +220,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 else:
                     return fn(self, *args)
             else:
-                with self.log.silent:
+                with self.log.silent():
                     return fn(self, *args)
         return wrapper
 
