@@ -213,8 +213,7 @@ class TorchDistributedTrainer(TorchTrainer):
             raise ValueError("The type of distributed config must be one of the following literals: ['torchrun', 'DDP', 'none']")
 
     def distributed (fn:Callable) -> Callable:
-        def wrapper(*args):
-            self = args[0]
+        def wrapper(self, *args):
             with logging_redirect_tqdm():
                 if self._dist:
                     if self.conf.distributed.type == "DDP":
@@ -223,9 +222,9 @@ class TorchDistributedTrainer(TorchTrainer):
                         else:
                             return fn(self, int(os.environ['LOCAL_RANK']), *args)
                     elif self.conf.distirbuted.type == "torchrun":
-                        return self.dist(int(os.environ['LOCAL_RANK']), fn.__name__)
+                        return self.dist(self, int(os.environ['LOCAL_RANK']), fn.__name__)
                 else:
-                    return fn(*args)
+                    return fn(self, *args)
         return wrapper
 
     def prepare (self, device:int, task:Literal['fit', 'eval', 'predict']):
