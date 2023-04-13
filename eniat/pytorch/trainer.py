@@ -117,7 +117,7 @@ class TorchTrainer(Trainer):
             getattr(self, fname)(self.conf.distributed.local_rank)
         elif self.conf.distributed.type == "DDP":
             self.log.info("setting DDP environment...")
-            os.environ["LOCAL_RANK"] = local_rank
+            os.environ["LOCAL_RANK"] = str(local_rank)
             os.environ["MASTER_ADDR"] = self.conf.distributed.master_address
             os.environ["MASTER_PORT"] = self.conf.distributed.master_port
             rank = self.conf.distributed.global_rank + local_rank
@@ -136,9 +136,9 @@ class TorchTrainer(Trainer):
                         if current_process().name == "MainProcess":
                             spawn(self.dist, (fn.__name__,), nprocs=self.conf.distributed.local_size, join=True)
                         else:
-                            return fn(os.environ['LOCAL_RANK'], *args)
+                            return fn(int(os.environ['LOCAL_RANK']), *args)
                     elif self.conf.distirbuted.type == "torchrun":
-                        return self.dist(os.environ['LOCAL_RANK'], fn.__name__, *args)
+                        return self.dist(int(os.environ['LOCAL_RANK']), fn.__name__, *args)
                 else:
                     return fn(*args)
         return wrapper
