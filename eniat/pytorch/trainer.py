@@ -108,6 +108,7 @@ class TorchTrainer(Trainer):
             os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
             os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
         if self.conf.distributed.type == "torchrun":
+            self.log.info("setting torchrun environment...")
             local_size = self.conf.distributed.local_size = int(os.environ['LOCAL_WORLD_SIZE'])
             self.conf.distributed.local_rank = int(os.environ['LOCAL_RANK'])
             self.conf.distributed.global_rank = int(os.environ['RANK'])
@@ -115,6 +116,7 @@ class TorchTrainer(Trainer):
             init_process_group(backend=self.conf.distributed.backend)
             getattr(self, fname)(self.conf.distributed.local_rank)
         elif self.conf.distributed.type == "DDP":
+            self.log.info("setting DDP environment...")
             os.environ["MASTER_ADDR"] = self.conf.distributed.master_address
             os.environ["MASTER_PORT"] = self.conf.distributed.master_port
             rank = self.conf.distributed.global_rank + local_rank
