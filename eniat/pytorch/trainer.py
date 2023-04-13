@@ -184,7 +184,7 @@ class TorchDistributedTrainer(TorchTrainer):
         self.init_step = conf.init_step
         self.max_step = conf.max_step
         
-    def dist(self, local_rank:int, fname:str) -> None:
+    def dist_init(self, local_rank:int, fname:str) -> None:
         self.log.debug("Spawn entry entered")
         if self.conf.distributed.debug:
             os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
@@ -210,16 +210,18 @@ class TorchDistributedTrainer(TorchTrainer):
 
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
-            if self._dist:
-                if self.conf.distributed.type == "DDP":
-                    if current_process().name == "MainProcess":
-                        spawn(self.dist, (fn.__name__,), nprocs=self.conf.distributed.local_size, join=True)
-                    else:
-                        return fn(self, int(os.environ['LOCAL_RANK']), *args)
-                elif self.conf.distirbuted.type == "torchrun":
-                    return self.dist(self, int(os.environ['LOCAL_RANK']), fn.__name__)
+            if current_process().name == "MainProcess":
+                if self._dist:
+                    if self.conf.distributed.type == "DDP":
+                        if current_process().name == "MainProcess":
+                            spawn(self.dist_init, (fn.__name__,), nprocs=self.conf.distributed.local_size, join=True)
+                    elif self.conf.distirbuted.type == "torchrun":
+                        return self.dist_init(self, int(os.environ['LOCAL_RANK']), fn.__name__)
+                else:
+                    return fn(self, *args)
             else:
-                return fn(self, *args)
+                with self.log.silent:
+                    return fn(self, *args)
         return wrapper
 
     def prepare (self, device:int, task:Literal['fit', 'eval', 'predict']):
@@ -307,7 +309,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 # Step Log
                 self.log.log_state(step_postfix)
                 # Step Eval
-                #self.grader.compute()
+
                 # Step Save
                 if self.unit == 'step' and current_step % self.conf.save_interval == 0:
                     self._save_checkpoint(current_step, 'step')

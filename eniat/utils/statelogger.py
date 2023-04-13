@@ -6,6 +6,7 @@ from omegaconf import DictConfig, OmegaConf
 import json
 
 class DummyLogger():
+    r"""This class is for debugging. You can ignore this."""
     def __init__(self, name, level, conf) -> None:
         self.conf = conf
 
@@ -34,12 +35,23 @@ class DummyLogger():
         return
 class StateLogger():
 
+    __silent:bool =False
+
+    class silent:
+        def __enter__(self):
+            self.prev_silent = StateLogger.__silent
+            StateLogger.__silent = True
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            StateLogger.__silent = self.prev_silent
+
     def __init__(self, name: str, level = 0, conf:DictConfig = None) -> None:
         self.conf = conf
         self.console = logging.getLogger(name)
         self.console.setLevel(level)
         self.unit = conf.unit
         self.interval = conf.interval
+        self.silent = False
 
     def _stepfilter(fn:Callable) -> Callable:
         def wrapper(self, data:dict, force:bool=False):
@@ -90,25 +102,25 @@ class StateLogger():
         return self.console.findCaller(stack_info, stacklevel)
 
     def info(self, msg, *args, **kwargs):
-        return self.console.info(msg, *args, **kwargs)
+        return self.console.info(msg, *args, **kwargs) if not self.__silent else None
     
     def debug(self, msg, *args, **kwargs):
-        return self.console.debug(msg, *args, **kwargs)
+        return self.console.debug(msg, *args, **kwargs) if not self.__silent else None
 
     def warning(self, msg, *args, **kwargs):
-        return self.console.warning(msg, *args, **kwargs)
+        return self.console.warning(msg, *args, **kwargs) if not self.__silent else None
 
     def error(self, msg, *args, **kwargs):
-        return self.console.error(msg, *args, **kwargs)
+        return self.console.error(msg, *args, **kwargs) if not self.__silent else None
 
     def critical(self, msg, *args, **kwargs):
-        return self.console.critical(msg, *args, **kwargs)
+        return self.console.critical(msg, *args, **kwargs) if not self.__silent else None
 
     def log(self, level, msg, *args, **kwargs):
-        return self.console.log(level, msg, *args, **kwargs)
+        return self.console.log(level, msg, *args, **kwargs) if not self.__silent else None
 
     def exception(self, msg, *args, **kwargs):
-        return self.console.exception(msg, *args, **kwargs)    
+        return self.console.exception(msg, *args, **kwargs) if not self.__silent else None 
 
     @_stepfilter
     def log_state(self, data:dict):
