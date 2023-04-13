@@ -117,6 +117,7 @@ class TorchTrainer(Trainer):
             getattr(self, fname)(self.conf.distributed.local_rank)
         elif self.conf.distributed.type == "DDP":
             self.log.info("setting DDP environment...")
+            os.environ["LOCAL_RANK"] = local_rank
             os.environ["MASTER_ADDR"] = self.conf.distributed.master_address
             os.environ["MASTER_PORT"] = self.conf.distributed.master_port
             rank = self.conf.distributed.global_rank + local_rank
@@ -135,14 +136,14 @@ class TorchTrainer(Trainer):
                         if current_process().name == "MainProcess":
                             spawn(self.dist, (fn.__name__,), nprocs=self.conf.distributed.local_size, join=True)
                         else:
-                            return fn(*args)
+                            return fn(os.environ['LOCAL_RANK'], *args)
                     elif self.conf.distirbuted.type == "torchrun":
                         return self.dist(os.environ['LOCAL_RANK'], fn.__name__, *args)
                 else:
                     return fn(*args)
         return wrapper
 
-    def prepare (self, task:Literal['fit', 'eval', 'predict']):
+    def prepare (self, device:int, task:Literal['fit', 'eval', 'predict']):
         # data
         self.course = FullCourse()
         cfg = self.data_conf
@@ -189,8 +190,7 @@ class TorchTrainer(Trainer):
             self.log.warning("Scheduler is not defined. Edit the configuration if this is not what you wanted.")
         
         if self._dist:
-            print(model)
-            model = DDP(model).compile() if self.compile else DDP(model)
+            model = DDP(model.to(device)).compile() if self.compile else DDP(model)
             optim = self.get_dist_opt(self.conf.distributed.optimizer, self.learner.model.get_params())
         
         # instantiate learner
@@ -214,7 +214,7 @@ class TorchTrainer(Trainer):
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
-        self.prepare('fit')
+        self.prepare(device, 'fit')
         current_step = 0
         for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
             for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent)):
@@ -243,15 +243,15 @@ class TorchTrainer(Trainer):
             destroy_process_group()
 
     @distributed
-    def eval(self, local_rank:int, final:bool=False, silent:bool=False):
-        self.prepare('eval')
+    def eval(self, device:int, final:bool=False, silent:bool=False):
+        self.prepare(device, 'eval')
         # Evaluation
         if not self.course:
             raise AttributeError("No evaluation dataset.")
             
         whole_batch = None
         for batch in tqdm(self.course, desc='Validation', unit='step', leave=False, disable=silent):
-            output = self.learner.infer(batch, local_rank)
+            output = self.learner.infer(batch, device)
             if not whole_batch:
                 whole_batch = torch.empty((0, *output.shape[1:]))
             whole_batch = torch.cat((whole_batch, output), dim=0)
@@ -265,8 +265,8 @@ class TorchTrainer(Trainer):
             return whole_batch
 
     @distributed
-    def predict(self, local_rank:int, final:bool=False, silent:bool=False):
-        self.prepare('predict')
+    def predict(self, device:int, final:bool=False, silent:bool=False):
+        self.prepare(device, 'predict')
         # Batch Inference
         outputs = None
         for batch in tqdm(self.loader, unit='Steps', position=1, disable=silent):
