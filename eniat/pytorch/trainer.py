@@ -287,7 +287,7 @@ class TorchTrainer(Trainer):
         if method == 'zero':
             if not params:
                 raise ValueError("model parameters require for zero redundancy optimizer.")
-            return ZeroRedundancyOptimizer(params, optimizer_class=getattr(torch.optim, type(self.learner.opt).__name__), parameters_as_bucket_view=False, overlap_with_ddp=False, **kwargs)
+            return ZeroRedundancyOptimizer(params, optimizer_class=getattr(torch.optim, type(opt).__name__), parameters_as_bucket_view=False, overlap_with_ddp=False, **kwargs)
         if method == 'postlocal':
             return PostLocalSGDOptimizer(opt, averagers.PeriodicModelAverager(**kwargs))
         
