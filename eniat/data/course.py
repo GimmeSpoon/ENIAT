@@ -2,7 +2,7 @@ from typing import Literal, Union, Callable, TypeVar, Sequence
 import numpy as np
 import pickle as pk
 from omegaconf import DictConfig
-from .._dyn import _conf_instantiate
+from .._dyn import conf_instantiate
 
 T_co = TypeVar('T_co', covariant=True)
 
@@ -10,7 +10,7 @@ def get_course_instance(cfg:DictConfig, log=None):
     _courses = FullCourse()
     for label in cfg:
         if 'cls' in cfg[label]:
-            _courses.append(Course(label , _conf_instantiate(cfg[label])))
+            _courses.append(Course(label , conf_instantiate(cfg[label])))
             if log:
                 log.info(f"'{label}' data is loaded.")
         elif 'path' in cfg[label]:
