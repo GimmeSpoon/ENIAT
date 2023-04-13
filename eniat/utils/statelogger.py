@@ -35,16 +35,16 @@ class DummyLogger():
         return
 class StateLogger():
 
-    __silent:bool =False
+    _silent:bool =False
 
     class silent:
         def __enter__(self):
-            self.prev_silent = StateLogger.__silent
-            StateLogger.__silent = True
+            self.prev_silent = StateLogger._silent
+            StateLogger._silent = True
             return self
 
         def __exit__(self, exc_type, exc_val, exc_tb):
-            StateLogger.__silent = self.prev_silent
+            StateLogger._silent = self.prev_silent
 
     def __init__(self, name: str, level = 0, conf:DictConfig = None) -> None:
         self.conf = conf
