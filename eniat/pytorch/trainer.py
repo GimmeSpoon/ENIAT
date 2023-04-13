@@ -114,7 +114,7 @@ class TorchTrainer(Trainer):
             self.conf.distributed.global_rank = int(os.environ['RANK'])
             self.conf.distributed.world_size = int(os.environ['WORLD_SIZE'])
             init_process_group(backend=self.conf.distributed.backend)
-            getattr(self, fname)(self.conf.distributed.local_rank)
+            getattr(self, fname)(self, self.conf.distributed.local_rank)
         elif self.conf.distributed.type == "DDP":
             self.log.info("setting DDP environment...")
             os.environ["LOCAL_RANK"] = str(local_rank)
@@ -122,7 +122,7 @@ class TorchTrainer(Trainer):
             os.environ["MASTER_PORT"] = self.conf.distributed.master_port
             rank = self.conf.distributed.global_rank + local_rank
             init_process_group(backend=self.conf.distributed.backend, world_size=self.conf.distributed.world_size, rank=rank)
-            return getattr(self, fname)(local_rank)
+            return getattr(self, fname)(self, local_rank)
         else:
             raise ValueError("The type of distributed config must be one of the following literals: ['torchrun', 'DDP', 'none']")
 
