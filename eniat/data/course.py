@@ -1,8 +1,30 @@
 from typing import Literal, Union, Callable, TypeVar, Sequence
 import numpy as np
 import pickle as pk
+from omegaconf import DictConfig
+from .._dyn import _conf_instantiate
 
 T_co = TypeVar('T_co', covariant=True)
+
+def get_course_instance(cfg:DictConfig, log=None):
+    _courses = FullCourse()
+    for label in cfg:
+        if 'cls' in cfg[label]:
+            _courses.append(Course(label , _conf_instantiate(cfg[label])))
+            if log:
+                log.info(f"'{label}' data is loaded.")
+        elif 'path' in cfg[label]:
+            _courses.append(course=Course(label, data=batch_load(cfg[label]['path'], cfg[label].type)))
+            if log:
+                log.info(f"'{label}' data is loaded.")
+        else:
+            if log:
+                log.warning(f"Data(:{label}) is not loaded because the path of data is not specified.")
+            return
+    if not len(_courses):
+        log.warning("No data is given! Terminating the task...")
+        return
+    return _courses
 
 def batch_load(paths:Union[str, Sequence[str]], type:Literal['csv', 'npy', 'pkl']):
 
