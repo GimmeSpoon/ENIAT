@@ -29,9 +29,6 @@ class TorchLearner(Learner, Generic[T_co]):
     def predict(self, batch:Tensor, device:int, logger):
         pass
 
-    def epoch(self):
-        self.sch.step()
-
     def load_model(self, state=None, path:str=None) -> None:
         if state:
             self.model.load_state_dict(state)

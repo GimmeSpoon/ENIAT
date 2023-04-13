@@ -312,7 +312,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 if self.unit == 'step' and current_step % self.conf.save_interval == 0:
                     self._save_checkpoint(current_step, 'step')
                 current_step += 1
-            self.learner.epoch()
+            self.learner.sch.step()
             self.log.info(f"Epoch {epoch} finished")
             #self.log.log_state()
 
