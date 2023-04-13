@@ -80,7 +80,7 @@ class TorchTrainer(Trainer):
         torch.save(train_state, os.path.join(os.getcwd(), f'checkpoints/state_{timestep}.cpt'))
 
     def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
-        if not force and (self.unit != unit or timestep % self.save_interval()):
+        if not force and (self.conf.unit != unit or timestep % self.conf.save_interval()):
             return
         self._save_model(timestep)
         self._save_train_state(timestep)
