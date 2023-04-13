@@ -103,16 +103,14 @@ class TorchTrainer(Trainer):
                 # Step Log
                 self.log.log_state(step_postfix)
                 # Step Eval
-                #self.grader.compute()
                 # Step Save
                 if self.unit == 'step' and current_step % self.conf.save_interval == 0:
                     self._save_checkpoint(current_step, 'step')
                 current_step += 1
             self.learner.epoch()
             self.log.info(f"Epoch {epoch} finished")
-            #self.log.log_state()
 
-        self._save_checkpoint('final')
+        self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
     def eval(self, device:int, silent:bool=False):
         current_step = 0
@@ -128,16 +126,14 @@ class TorchTrainer(Trainer):
                 # Step Log
                 self.log.log_state(step_postfix)
                 # Step Eval
-                #self.grader.compute()
                 # Step Save
                 if self.unit == 'step' and current_step % self.conf.save_interval == 0:
                     self._save_checkpoint(current_step, 'step')
                 current_step += 1
             self.learner.epoch()
             self.log.info(f"Epoch {epoch} finished")
-            #self.log.log_state()
 
-        self._save_checkpoint('final')
+        self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
     def predict(self, device:int, silent:bool=False):
         current_step = 0
@@ -162,7 +158,7 @@ class TorchTrainer(Trainer):
             self.log.info(f"Epoch {epoch} finished")
             #self.log.log_state()
 
-        self._save_checkpoint('final')
+        self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
 class TorchDistributedTrainer(TorchTrainer):
     r"""PyTorch compatible trainer class, and supports distributed learning (DistirbutedDataParallel aka DDP or Torchrun).
@@ -321,7 +317,7 @@ class TorchDistributedTrainer(TorchTrainer):
             self.log.info(f"Epoch {epoch} finished")
             #self.log.log_state()
 
-        self._save_checkpoint('final')
+        self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
         if self.distributed:
             destroy_process_group()
