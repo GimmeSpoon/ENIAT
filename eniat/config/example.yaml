@@ -37,11 +37,11 @@ trainer:
   distributed:
      type: DDP
      debug: False
-     local_size: 1
-     world_size: 1
+     local_size: 2
+     world_size: 2
      master_address: 'localhost'
      master_port: '12345'
-     backend: nccl
+     backend: gloo
      env_set:
      env_copy:
 
