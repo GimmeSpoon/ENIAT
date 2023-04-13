@@ -135,7 +135,7 @@ class TorchTrainer(Trainer):
                         if current_process().name == "MainProcess":
                             spawn(self.dist, (fn.__name__,), nprocs=self.conf.distributed.local_size, join=True)
                         else:
-                            print("dasdfasdfas")
+                            return fn(*args)
                     elif self.conf.distirbuted.type == "torchrun":
                         return self.dist(os.environ['LOCAL_RANK'], fn.__name__, *args)
                 else:
