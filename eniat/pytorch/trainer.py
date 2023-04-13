@@ -17,7 +17,7 @@ import numpy as np
 from omegaconf import DictConfig
 from multiprocessing import current_process
 from ..data.course import get_course_instance, batch_load
-from .._dyn import _conf_instantiate, dynamic_import
+from .._dyn import conf_instantiate, _dynamic_import
 from hydra.utils import instantiate
 from importlib import import_module
 
@@ -235,7 +235,7 @@ class TorchDistributedTrainer(TorchTrainer):
         cfg = self.data_conf
         for label in cfg:
             if 'cls' in cfg[label]:
-                self.course.append(Course(label, _conf_instantiate(cfg[label])))
+                self.course.append(Course(label, conf_instantiate(cfg[label])))
                 self.log.info(f"'{label}' data is loaded")
             elif 'path' in cfg[label]:
                 self.course.append(course=Course(label, data=batch_load(cfg[label]['path'], cfg[label].type)))
@@ -251,7 +251,7 @@ class TorchDistributedTrainer(TorchTrainer):
 
         # learner
         cfg = self.learner_conf
-        model = _conf_instantiate(cfg.model)
+        model = conf_instantiate(cfg.model)
         self.log.info("Model loaded...")
 
         if not cfg.resume:
@@ -281,7 +281,7 @@ class TorchDistributedTrainer(TorchTrainer):
         
         # instantiate learner
         if 'path' in cfg and cfg.path:
-            _mod, _bn = dynamic_import(cfg.path)
+            _mod, _bn = _dynamic_import(cfg.path)
             self.learner = getattr(_mod, cfg.cls)(model, loss, optim, schlr, cfg.resume, cfg.resume_path)
         else:
             self.learner = getattr(import_module('.pytorch.learner', 'eniat'), cfg.cls)(model, loss, optim, schlr, cfg.resume, cfg.resume_path)
