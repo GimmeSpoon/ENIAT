@@ -214,6 +214,7 @@ class TorchTrainer(Trainer):
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
+        print("SELF: ", self, "DEV: ", device, "GR: ", global_rank)
         self.prepare(device, 'fit')
         current_step = 0
         for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
