@@ -102,25 +102,25 @@ class StateLogger():
         return self.console.findCaller(stack_info, stacklevel)
 
     def info(self, msg, *args, **kwargs):
-        return self.console.info(msg, *args, **kwargs) if not self.__silent else None
+        return self.console.info(msg, *args, **kwargs) if not self._silent else None
     
     def debug(self, msg, *args, **kwargs):
-        return self.console.debug(msg, *args, **kwargs) if not self.__silent else None
+        return self.console.debug(msg, *args, **kwargs) if not self._silent else None
 
     def warning(self, msg, *args, **kwargs):
-        return self.console.warning(msg, *args, **kwargs) if not self.__silent else None
+        return self.console.warning(msg, *args, **kwargs) if not self._silent else None
 
     def error(self, msg, *args, **kwargs):
-        return self.console.error(msg, *args, **kwargs) if not self.__silent else None
+        return self.console.error(msg, *args, **kwargs) if not self._silent else None
 
     def critical(self, msg, *args, **kwargs):
-        return self.console.critical(msg, *args, **kwargs) if not self.__silent else None
+        return self.console.critical(msg, *args, **kwargs) if not self._silent else None
 
     def log(self, level, msg, *args, **kwargs):
-        return self.console.log(level, msg, *args, **kwargs) if not self.__silent else None
+        return self.console.log(level, msg, *args, **kwargs) if not self._silent else None
 
     def exception(self, msg, *args, **kwargs):
-        return self.console.exception(msg, *args, **kwargs) if not self.__silent else None 
+        return self.console.exception(msg, *args, **kwargs) if not self._silent else None 
 
     @_stepfilter
     def log_state(self, data:dict):
