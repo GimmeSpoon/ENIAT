@@ -191,7 +191,7 @@ class TorchTrainer(Trainer):
         
         if self._dist:
             model = DDP(model.to(device)).compile() if self.compile else DDP(model)
-            optim = self.get_dist_opt(self.conf.distributed.optimizer, model.parameters())
+            optim = self.get_dist_opt(self.conf.distributed.optimizer, optim, model.parameters())
         
         # instantiate learner
         if 'path' in cfg and cfg.path:
@@ -283,13 +283,13 @@ class TorchTrainer(Trainer):
     def accelerate(self):
         self.learner.set_model(torch.compile(self.learner.model))
 
-    def get_dist_opt(self, method:Literal['zero', 'postlocal'], params=None, **kwargs):
+    def get_dist_opt(self, method:Literal['zero', 'postlocal'], opt=None, params=None, **kwargs):
         if method == 'zero':
             if not params:
                 raise ValueError("model parameters require for zero redundancy optimizer.")
             return ZeroRedundancyOptimizer(params, optimizer_class=getattr(torch.optim, type(self.learner.opt).__name__), parameters_as_bucket_view=False, overlap_with_ddp=False, **kwargs)
         if method == 'postlocal':
-            return PostLocalSGDOptimizer(self.learner.opt, averagers.PeriodicModelAverager(**kwargs))
+            return PostLocalSGDOptimizer(opt, averagers.PeriodicModelAverager(**kwargs))
         
     def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
         dataset = self.course.get_dataset(dataset)
