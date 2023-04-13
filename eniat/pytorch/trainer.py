@@ -25,26 +25,10 @@ T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
 
 class TorchTrainer(Trainer):
-
-    def __init__(self, conf:DictConfig=None, learner_conf:DictConfig=None, data_conf:DictConfig=None, grader=None, logger=None) -> None:
-
-        if not conf.distributed or conf.distributed.type == 'none':
-            self._dist = False
-        else: # distributed learning set
-            self._dist = True
-
-        self.conf = conf
-        self.learner_conf = learner_conf
-        self.data_conf = data_conf
-
-        self.log = logger
-
-        self.seed = conf.seed
-        self.unit = conf.unit
-        self.save_interval = conf.save_interval
-        self.compile = conf.accel
-        self.init_step = conf.init_step
-        self.max_step = conf.max_step
+    r"""PyTorch compatible trainer class.
+    Automatically manage trainign step, logging, and saving checkpoints. Takse one task, one dataset, and one learner for any run. For several tasks, you can initiate the same number of Trainers."""
+    def __init__(self, course: C = None, learner: T = None, conf=None, grader=None, logger=None) -> None:
+        super().__init__(course, learner, conf, grader, logger)
 
     def rand_all(self, seed):
         if self._dist:
@@ -101,6 +85,108 @@ class TorchTrainer(Trainer):
         self._save_model(timestep)
         self._save_train_state(timestep)
         self.log.info(f"Checkpoint at {timestep} {unit} saved.")
+
+    def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
+        return DataLoader(self.course.get_dataset(dataset), num_workers=self.conf.num_workers)
+
+    def fit(self, device:int, silent:bool=False):
+        current_step = 0
+        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
+            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent)):
+                batch = self.to_tensor(batch)
+                tr_loss = self.learner.fit(batch, device, self.log)
+                self.learner.opt.zero_grad()
+                tr_loss.backward()
+                self.learner.opt.step()
+                step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
+                step_bar.set_postfix(step_postfix)
+                # Step Log
+                self.log.log_state(step_postfix)
+                # Step Eval
+                #self.grader.compute()
+                # Step Save
+                if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                    self._save_checkpoint(current_step, 'step')
+                current_step += 1
+            self.learner.epoch()
+            self.log.info(f"Epoch {epoch} finished")
+            #self.log.log_state()
+
+        self._save_checkpoint('final')
+
+    def eval(self, device:int, silent:bool=False):
+        current_step = 0
+        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
+            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent)):
+                batch = self.to_tensor(batch)
+                tr_loss = self.learner.fit(batch, device, self.log)
+                self.learner.opt.zero_grad()
+                tr_loss.backward()
+                self.learner.opt.step()
+                step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
+                step_bar.set_postfix(step_postfix)
+                # Step Log
+                self.log.log_state(step_postfix)
+                # Step Eval
+                #self.grader.compute()
+                # Step Save
+                if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                    self._save_checkpoint(current_step, 'step')
+                current_step += 1
+            self.learner.epoch()
+            self.log.info(f"Epoch {epoch} finished")
+            #self.log.log_state()
+
+        self._save_checkpoint('final')
+
+    def predict(self, device:int, silent:bool=False):
+        current_step = 0
+        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
+            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent)):
+                batch = self.to_tensor(batch)
+                tr_loss = self.learner.fit(batch, device, self.log)
+                self.learner.opt.zero_grad()
+                tr_loss.backward()
+                self.learner.opt.step()
+                step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
+                step_bar.set_postfix(step_postfix)
+                # Step Log
+                self.log.log_state(step_postfix)
+                # Step Eval
+                #self.grader.compute()
+                # Step Save
+                if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                    self._save_checkpoint(current_step, 'step')
+                current_step += 1
+            self.learner.epoch()
+            self.log.info(f"Epoch {epoch} finished")
+            #self.log.log_state()
+
+        self._save_checkpoint('final')
+
+class TorchDistributedTrainer(TorchTrainer):
+    r"""PyTorch compatible trainer class, and supports distributed learning (DistirbutedDataParallel aka DDP or Torchrun).
+    Because Eniat basically load necessary components and data dynamically, TorchTrainer does not work in the distributed environment.
+    TorchDistributedTrainer is technically doing sames tasks as TorchTrainer, but it loads components after spawned processes started. Because of that, it receives only config parameters, and handles loading by itself."""
+    def __init__(self, conf:DictConfig=None, learner_conf:DictConfig=None, data_conf:DictConfig=None, grader=None, logger=None) -> None:
+
+        if not conf.distributed or conf.distributed.type == 'none':
+            self._dist = False
+        else: # distributed learning set
+            self._dist = True
+
+        self.conf = conf
+        self.learner_conf = learner_conf
+        self.data_conf = data_conf
+
+        self.log = logger
+
+        self.seed = conf.seed
+        self.unit = conf.unit
+        self.save_interval = conf.save_interval
+        self.compile = conf.accel
+        self.init_step = conf.init_step
+        self.max_step = conf.max_step
         
     def dist(self, local_rank:int, fname:str) -> None:
         self.log.debug("Spawn entry entered")
@@ -231,7 +317,7 @@ class TorchTrainer(Trainer):
                 #self.grader.compute()
                 # Step Save
                 if self.unit == 'step' and current_step % self.conf.save_interval == 0:
-                    self._save_checkpoint('step' + current_step)
+                    self._save_checkpoint(current_step, 'step')
                 current_step += 1
             self.learner.epoch()
             self.log.info(f"Epoch {epoch} finished")
@@ -279,9 +365,6 @@ class TorchTrainer(Trainer):
             destroy_process_group()
 
         return outputs
-    
-    def accelerate(self):
-        self.learner.set_model(torch.compile(self.learner.model))
 
     def get_dist_opt(self, method:Literal['zero', 'postlocal'], opt=None, params=None, **kwargs):
         if method == 'zero':

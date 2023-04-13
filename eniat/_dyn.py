@@ -6,7 +6,7 @@ import sys
 from importlib.util import spec_from_file_location, module_from_spec
 from typing import Callable, Sequence, Union
 
-def dynamic_import(path:str, name:str = None):
+def _dynamic_import(path:str, name:str = None):
     _spec = spec_from_file_location(_bn:=name if name else os.path.basename(path), os.path.abspath(path))
     if not _spec:
         raise FileNotFoundError(f"Can not read from the location : {path}")
@@ -15,17 +15,17 @@ def dynamic_import(path:str, name:str = None):
     _spec.loader.exec_module(_mod)
     return _mod, _bn
 
-def dynamic_load(name:str, path:str):
-    _mod, _bn = dynamic_import(path, name)
-    return getattr(_mod, name), _bn
+def _dynamic_load(name:str, path:str):
+    _mod, _bn = _dynamic_import(path, name)
+    return getattr(_mod, name)
 
-def _conf_instantiate(options:DictConfig):
+def conf_instantiate(options:DictConfig):
     if not options:
         return None
     if '_target_' in options:
         return instantiate(options)
     elif 'path' in options and 'cls' in options:
-        _cls, _bn = dynamic_load(options.cls, options.path)
+        _cls = _dynamic_load(options.cls, options.path)
         options = OmegaConf.to_container(options)
         options.pop('_target_', None)
         options.pop('path', None)

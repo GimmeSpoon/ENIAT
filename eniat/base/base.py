@@ -27,9 +27,19 @@ L = TypeVar('L', bound=Learner)
 
 class Trainer:
     r'''Base class for Trainer
-    Trainer gets a data and model pair to train or validate.
-    For the purpose, trainer will manage environments for learners.
-    Remember, Trainers can have multiple models learned or infer but must have only unique dataset pair.
+
+    Trainer provides logging and saving checkpoints, furthermore lessen the repetitive parts in usual machine learning codes.
+    BaseTrainer provides fit, eval, and predict features even it not specifying compatibility with libraries such as PyTorch or Scikit-learn.
+    It can work with some of simple models, thus you can use this standalone. But for supported libraries, it would be recommended to use based class for the task.
+    Remember, Trainers are designed to do only one task at a time, which means for multiple tasks you are required to initiate the same number of trainers.
+    This is beacause for distributed learning in PyTorch, it would complicate the whole project if the trainer manages multiple tasks by alone.
+
+    Arguments:
+        :param course: dataset for the task. It should not be modified while on doing tasks.
+        :param learner: learner(model) for the task. recommend to use same based class e.g. TorchLearner for TorchTrainer.
+        :param conf: Trainer configuration structured by omegaconf DictConfig.
+        :param grader: Evalutor from eniat package.
+        :param logger: Logger from eniat package. required.
     '''
     def __init__(self, course:D=None, learner:L=None, conf=None, grader=None, logger=None) -> None:
         self.course = course
