@@ -94,9 +94,9 @@ def eniat(cfg: DictConfig) -> None:
                     log.info("Learner instance created.")
 
                 # instantiate trainer
-                trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchTrainer')(conf=cfg.trainer, data_conf=cfg.data, learner_conf=cfg.learner, logger=log)
+                trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchTrainer')(course=_courses, learner=learner, conf=cfg.trainer, logger=log)
             else:
-                trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchDistributedTrainer')
+                trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchDistributedTrainer')(conf=cfg.trainer, data_conf=cfg.data, learner_conf=cfg.learner, logger=log)
                 log.info("Distributed Learning (Torch) is configured.")
             
             if trainer:
