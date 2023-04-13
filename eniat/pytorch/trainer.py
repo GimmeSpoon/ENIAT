@@ -190,8 +190,8 @@ class TorchTrainer(Trainer):
             self.log.warning("Scheduler is not defined. Edit the configuration if this is not what you wanted.")
         
         if self._dist:
-            optim = self.get_dist_opt(self.conf.distributed.optimizer, model.get_params())
             model = DDP(model.to(device)).compile() if self.compile else DDP(model)
+            optim = self.get_dist_opt(self.conf.distributed.optimizer, model.parameters())
         
         # instantiate learner
         if 'path' in cfg and cfg.path:
