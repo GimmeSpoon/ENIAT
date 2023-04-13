@@ -52,7 +52,6 @@ class StateLogger():
         self.console.setLevel(level)
         self.unit = conf.unit
         self.interval = conf.interval
-        self.silent = False
 
     def _stepfilter(fn:Callable) -> Callable:
         def wrapper(self, data:dict, force:bool=False):
