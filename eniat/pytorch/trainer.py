@@ -107,7 +107,7 @@ class TorchTrainer(Trainer):
                 if self.unit == 'step' and current_step % self.conf.save_interval == 0:
                     self._save_checkpoint(current_step, 'step')
                 current_step += 1
-            self.learner.epoch()
+            self.learner.sch.step()
             self.log.info(f"Epoch {epoch} finished")
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
@@ -210,17 +210,16 @@ class TorchDistributedTrainer(TorchTrainer):
 
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
-            with logging_redirect_tqdm():
-                if self._dist:
-                    if self.conf.distributed.type == "DDP":
-                        if current_process().name == "MainProcess":
-                            spawn(self.dist, (fn.__name__,), nprocs=self.conf.distributed.local_size, join=True)
-                        else:
-                            return fn(self, int(os.environ['LOCAL_RANK']), *args)
-                    elif self.conf.distirbuted.type == "torchrun":
-                        return self.dist(self, int(os.environ['LOCAL_RANK']), fn.__name__)
-                else:
-                    return fn(self, *args)
+            if self._dist:
+                if self.conf.distributed.type == "DDP":
+                    if current_process().name == "MainProcess":
+                        spawn(self.dist, (fn.__name__,), nprocs=self.conf.distributed.local_size, join=True)
+                    else:
+                        return fn(self, int(os.environ['LOCAL_RANK']), *args)
+                elif self.conf.distirbuted.type == "torchrun":
+                    return self.dist(self, int(os.environ['LOCAL_RANK']), fn.__name__)
+            else:
+                return fn(self, *args)
         return wrapper
 
     def prepare (self, device:int, task:Literal['fit', 'eval', 'predict']):
