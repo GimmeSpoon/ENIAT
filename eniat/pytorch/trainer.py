@@ -32,7 +32,7 @@ def _stdout():
     print(current_process().name)
     systream = sys.stdout, sys.stderr
     # IO (Main process)
-    if current_process().name == "MainProcess":
+    if current_process().name == "SpawnProcess-1":
         try:
             sys.stdout, sys.stderr = map(DummyTqdmFile, systream)
             yield systream[0]
