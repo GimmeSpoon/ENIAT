@@ -29,13 +29,22 @@ C = TypeVar('C', bound=FullCourse)
 
 @contextmanager
 def _stdout():
+    print(current_process().name)
+    systream = sys.stdout, sys.stderr
     # IO (Main process)
     if current_process().name == "MainProcess":
-        print("YAHOOO!")
-        systream = sys.stdout, sys.stderr
         try:
             sys.stdout, sys.stderr = map(DummyTqdmFile, systream)
             yield systream[0]
+        except Exception as e:
+            raise e
+        finally:
+            sys.stdout, sys.stderr = systream
+    else:
+        try:
+            with open(os.devnull, 'w') as f:
+                sys.stdout, sys.stderr = f, f
+                yield sys.stdout
         except Exception as e:
             raise e
         finally:
