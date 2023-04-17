@@ -22,9 +22,24 @@ from ..data.course import get_course_instance, batch_load
 from .._dyn import conf_instantiate, _dynamic_import
 from hydra.utils import instantiate
 from importlib import import_module
+from contextlib import contextmanager
 
 T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
+
+@contextmanager
+def _stdout():
+    # IO (Main process)
+    if current_process().name == "MainProcess":
+        print("YAHOOO!")
+        systream = sys.stdout, sys.stderr
+        try:
+            sys.stdout, sys.stderr = map(DummyTqdmFile, systream)
+            yield systream[0]
+        except Exception as e:
+            raise e
+        finally:
+            sys.stdout, sys.stderr = systream
 
 class TorchTrainer(Trainer):
     r"""PyTorch compatible trainer class.
@@ -91,23 +106,10 @@ class TorchTrainer(Trainer):
     def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
         return DataLoader(self.course.get_dataset(dataset), num_workers=self.conf.num_workers)
 
-    def _stdout(self):
-        # IO (Main process)
-        if current_process().name == "MainProcess":
-            print("YAHOOO!")
-            systream = sys.stdout, sys.stderr
-            try:
-                sys.stdout, sys.stderr = map(DummyTqdmFile, systream)
-                yield systream[0]
-            except Exception as e:
-                raise e
-            finally:
-                sys.stdout, sys.stderr = systream
-
     def fit(self, device:int, silent:bool=False):
         current_step = 0
-        with self._stdout() as _stdout:
-            for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=_stdout)):
+        with _stdout() as stdout:
+            for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=stdout)):
                 for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent, _file=_stdout)):
                     batch = self.to_tensor(batch)
                     tr_loss = self.learner.fit(batch, device, self.log)
@@ -313,8 +315,8 @@ class TorchDistributedTrainer(TorchTrainer):
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
         self.prepare(device, 'fit')
         current_step = 0
-        with self._stdout() as _stdout:
-            for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=_stdout)):
+        with _stdout() as stdout:
+            for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=stdout)):
                 for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent, file=_stdout)):
                     batch = self.to_tensor(batch)
                     tr_loss = self.learner.fit(batch, device, self.log)
