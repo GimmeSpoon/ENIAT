@@ -42,6 +42,7 @@ def _stdout():
         finally:
             sys.stdout, sys.stderr = systream
     else:
+        print("stdout to null")
         try:
             with open(os.devnull, 'w') as f:
                 sys.stdout, sys.stderr = f, f
