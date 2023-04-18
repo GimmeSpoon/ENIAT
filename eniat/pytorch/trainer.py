@@ -35,7 +35,6 @@ def _stdout():
     if current_process().name == "SpawnProcess-1":
         try:
             sys.stdout, sys.stderr = map(DummyTqdmFile, systream)
-            print(current_process().name + "got original!")
             yield systream[0]
         except Exception as e:
             raise e
@@ -45,7 +44,6 @@ def _stdout():
         try:
             with open(os.devnull, 'w') as f:
                 sys.stdout, sys.stderr = f, f
-                print(current_process().name + "got nothing!")
                 yield sys.stdout
         except Exception as e:
             raise e
