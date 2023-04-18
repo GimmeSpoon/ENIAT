@@ -337,6 +337,7 @@ class TorchDistributedTrainer(TorchTrainer):
         self.prepare(device, 'fit')
         current_step = 0
         with _stdout() as stdout:
+            print("After redirect")
             for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=stdout, dynamic_ncols=True)):
                 for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent, file=stdout, dynamic_ncols=True)):
                     batch = self.to_tensor(batch)
