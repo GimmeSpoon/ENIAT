@@ -188,7 +188,7 @@ class TorchDistributedTrainer(TorchTrainer):
     r"""PyTorch compatible trainer class, and supports distributed learning (DistirbutedDataParallel aka DDP or Torchrun).
     Because Eniat basically load necessary components and data dynamically, TorchTrainer does not work in the distributed environment.
     TorchDistributedTrainer is technically doing sames tasks as TorchTrainer, but it loads components after spawned processes started. Because of that, it receives only config parameters, and handles loading by itself."""
-    def __init__(self, conf:DictConfig=None, learner_conf:DictConfig=None, data_conf:DictConfig=None, grader=None, logger=None) -> None:
+    def __init__(self, conf:DictConfig=None, learner_conf:DictConfig=None, data_conf:DictConfig=None, logger_conf:DictConfig=None, grader=None) -> None:
 
         if not conf.distributed or conf.distributed.type == 'none':
             self._dist = False
@@ -199,7 +199,7 @@ class TorchDistributedTrainer(TorchTrainer):
         self.learner_conf = learner_conf
         self.data_conf = data_conf
 
-        self.log = StateLogger('eniat')
+        self.log = StateLogger('eniat', conf=logger_conf)
 
         self.seed = conf.seed
         self.unit = conf.unit
