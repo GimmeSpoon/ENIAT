@@ -330,8 +330,11 @@ class TorchDistributedTrainer(TorchTrainer):
         silent = device != 0 and silent
         self.prepare(device, 'fit')
         current_step = 0
-        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, dynamic_ncols=True)):
-            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent, dynamic_ncols=True)):
+
+        print(current_process().name ,"fit", silent)
+
+        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
+            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent)):
                 batch = self.to_tensor(batch)
                 tr_loss = self.learner.fit(batch, device, self.log)
                 self.learner.opt.zero_grad()
@@ -358,6 +361,8 @@ class TorchDistributedTrainer(TorchTrainer):
 
     @distributed
     def eval(self, device:int, final:bool=False, silent:bool=False):
+
+        silent = device != 0 and silent
         self.prepare(device, 'eval')
         # Evaluation
         if not self.course:
@@ -380,6 +385,8 @@ class TorchDistributedTrainer(TorchTrainer):
 
     @distributed
     def predict(self, device:int, final:bool=False, silent:bool=False):
+
+        silent = device != 0 and silent
         self.prepare(device, 'predict')
         # Batch Inference
         outputs = None
