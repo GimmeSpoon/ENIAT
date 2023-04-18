@@ -32,17 +32,7 @@ C = TypeVar('C', bound=FullCourse)
 def _stdout():
     systream = sys.stdout, sys.stderr
     # IO (Main process)
-    if current_process().name == "SpawnProcess-1":
-        print("stdout to tqqdm dummy file")
-        try:
-            sys.stdout, sys.stderr = map(DummyTqdmFile, systream)
-            yield systream[0]
-        except Exception as e:
-            raise e
-        finally:
-            sys.stdout, sys.stderr = systream
-    else:
-        print("stdout to null")
+    if (_pname:=current_process().name) != "SpawnProcess-1" and _pname != "MainProcess":
         try:
             with open(os.devnull, 'w') as f:
                 sys.stdout, sys.stderr = f, f
