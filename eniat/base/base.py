@@ -13,7 +13,6 @@ class Warning ():
         self.logger = logger
 
     def __call__(self, message, category, filename, lineno, file=None, line=None):
-        print(self.logger)
         self.logger.warning(warnings.formatwarning(message, category, filename, lineno, line))
 
 class Learner (metaclass=ABCMeta):
