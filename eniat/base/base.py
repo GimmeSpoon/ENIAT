@@ -12,8 +12,8 @@ class Warning ():
     def __init__(self, logger) -> None:
         self.logger = logger
 
-    def __call__(self, *args, **kwds):
-        self.logger.warning(warnings.formatwarning(*args, **kwds))
+    def __call__(self, message, category, filename, lineno, file=None, line=None):
+        self.logger.warning(warnings.formatwarning(message, category, filename, lineno, line))
 
 class Learner (metaclass=ABCMeta):
     r'''Base class for all learners
