@@ -9,7 +9,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 import torch
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torch.multiprocessing import spawn
-from torch.distributed import init_process_group, destroy_process_group, get_rank
+from torch.distributed import init_process_group, destroy_process_group, get_rank, is_initialized
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.optim import PostLocalSGDOptimizer, ZeroRedundancyOptimizer
 import torch.distributed.algorithms.model_averaging.averagers as averagers
@@ -234,8 +234,7 @@ class TorchDistributedTrainer(TorchTrainer):
 
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
-            print(get_rank())
-            if current_process().name == "MainProcess":
+            if not is_initialized():
                 warnings.showwarning = Warning(self.log)
                 if self._dist:
                     if self.conf.distributed.type == "DDP":
