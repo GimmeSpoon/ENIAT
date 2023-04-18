@@ -200,7 +200,7 @@ class TorchDistributedTrainer(TorchTrainer):
         self.learner_conf = learner_conf
         self.data_conf = data_conf
 
-        self.log = logger
+        self.log = logging.getLogger('eniat')
 
         self.seed = conf.seed
         self.unit = conf.unit
@@ -334,7 +334,6 @@ class TorchDistributedTrainer(TorchTrainer):
         current_step = 0
 
         for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Mini Batch   ', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
-            print("epoch :", epoch)
             for batch in (step_bar:=tqdm(self.loader, desc='Training step', unit='step', position=1, leave=False, disable=silent)):
                 batch = self.to_tensor(batch)
                 tr_loss = self.learner.fit(batch, device, self.log)

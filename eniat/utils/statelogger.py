@@ -102,14 +102,12 @@ class StateLogger():
         return self.console.findCaller(stack_info, stacklevel)
 
     def info(self, msg, *args, **kwargs):
-        print(self._silent)
         return self.console.info(msg, *args, **kwargs) if not self._silent else None
     
     def debug(self, msg, *args, **kwargs):
         return self.console.debug(msg, *args, **kwargs) if not self._silent else None
 
     def warning(self, msg, *args, **kwargs):
-        print(self._silent)
         return self.console.warning(msg, *args, **kwargs) if not self._silent else None
 
     def error(self, msg, *args, **kwargs):
