@@ -327,7 +327,7 @@ class TorchDistributedTrainer(TorchTrainer):
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
-        silent = device != 0 and silent
+        silent = True if device != 0 else silent
         self.prepare(device, 'fit')
         current_step = 0
 
