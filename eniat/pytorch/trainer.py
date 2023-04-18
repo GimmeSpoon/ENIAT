@@ -250,8 +250,12 @@ class TorchDistributedTrainer(TorchTrainer):
                 else:
                     return fn(self, *args)
             else:
+                if current_process().name == "SpawnProcess-1":
+                    warnings.showwarning = Warning(self.log)
+                else:
+                    warnings.filterwarnings("ignore")
                 print(current_process().name)
-                warnings.filterwarnings("ignore")
+                
                 with self.log.silent():
                     return fn(self, *args)
         return wrapper
