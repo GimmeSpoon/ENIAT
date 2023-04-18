@@ -1,5 +1,6 @@
 from omegaconf import DictConfig, OmegaConf
 import hydra
+from hydra import compose, initialize
 from hydra.utils import instantiate
 import pkg_resources
 import os
@@ -10,15 +11,22 @@ from ._dyn import _dynamic_load, _dynamic_import, _merge_conf_by_path, conf_inst
 from .data.course import FullCourse, Course, batch_load
 
 version_base = None
-global_config_path = os.path.abspath(pkg_resources.resource_filename(__name__, 'config'))
+eniat_path = os.path.abspath(pkg_resources.resource_filename(__name__, 'config'))
 
-@hydra.main(version_base=version_base, config_path=global_config_path, config_name='eniat')
+def init_conf(global_config_path:str=os.path.relpath(eniat_path, os.getcwd()), job_name:str="eniat", version_base=None):
+    # Global Config
+    with initialize(version_base=version_base, config_path=global_config_path, job_name=job_name):
+        cfg = compose(config_name="eniat")
+        print(cfg)
+    return cfg
+
+@hydra.main(version_base=version_base, config_path=eniat_path, config_name='eniat')
 def eniat(cfg: DictConfig) -> None:
 
     cfg = _merge_conf_by_path(cfg, cfg.config)
 
     if cfg.do == 'init':
-        copytree(global_config_path, './config', ignore=ignore_patterns('*.yaml'))
+        copytree(eniat_path, './config', ignore=ignore_patterns('*.yaml'))
         print("Config files copied to current directory.")
         return
     elif cfg.do == 'help':

@@ -248,10 +248,12 @@ class TorchDistributedTrainer(TorchTrainer):
                 if current_process().name == "SpawnProcess-1":
                     self.log.info("Custom Warning")
                     warnings.showwarning = Warning(self.log)
+                    return fn(self, *args)
                 else:
                     self.log.info("warning ignored")
                     warnings.filterwarnings("ignore")
-                return fn(self, *args)
+                    with self.log.silent():
+                        return fn(self, *args)
         return wrapper
 
     def prepare (self, device:int, task:Literal['fit', 'eval', 'predict']):
@@ -330,6 +332,7 @@ class TorchDistributedTrainer(TorchTrainer):
         current_step = 0
 
         for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Mini Batch   ', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
+            print("epoch :", epoch)
             for batch in (step_bar:=tqdm(self.loader, desc='Training step', unit='step', position=1, leave=False, disable=silent)):
                 batch = self.to_tensor(batch)
                 tr_loss = self.learner.fit(batch, device, self.log)
