@@ -327,11 +327,10 @@ class TorchDistributedTrainer(TorchTrainer):
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
-        print(current_process().name)
         self.prepare(device, 'fit')
         current_step = 0
-        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=stdout, dynamic_ncols=True)):
-            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent, file=stdout, dynamic_ncols=True)):
+        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, dynamic_ncols=True)):
+            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent, dynamic_ncols=True)):
                 batch = self.to_tensor(batch)
                 tr_loss = self.learner.fit(batch, device, self.log)
                 self.learner.opt.zero_grad()
