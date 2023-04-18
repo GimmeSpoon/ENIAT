@@ -1,5 +1,5 @@
 from typing import TypeVar, Literal, Callable
-from ..base import Trainer
+from ..base import Trainer, Warning
 from ..data.course import Course, FullCourse
 from .learner import TorchLearner
 from tqdm.auto import tqdm
@@ -23,6 +23,7 @@ from .._dyn import conf_instantiate, _dynamic_import
 from hydra.utils import instantiate
 from importlib import import_module
 from contextlib import contextmanager
+import warnings
 
 T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
@@ -56,6 +57,7 @@ class TorchTrainer(Trainer):
     Automatically manage trainign step, logging, and saving checkpoints. Takse one task, one dataset, and one learner for any run. For several tasks, you can initiate the same number of Trainers."""
     def __init__(self, course: C = None, learner: T = None, conf=None, grader=None, logger=None) -> None:
         super().__init__(course, learner, conf, grader, logger)
+        warnings.showwarning = Warning(self.log)
 
     def rand_all(self, seed):
         if self._dist:
@@ -239,6 +241,7 @@ class TorchDistributedTrainer(TorchTrainer):
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
             if current_process().name == "MainProcess":
+                warnings.showwarning = Warning(self.log)
                 if self._dist:
                     if self.conf.distributed.type == "DDP":
                         if current_process().name == "MainProcess":
@@ -248,6 +251,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 else:
                     return fn(self, *args)
             else:
+                warnings.filterwarnings("ignore")
                 with self.log.silent():
                     return fn(self, *args)
         return wrapper

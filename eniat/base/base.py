@@ -3,8 +3,17 @@ from typing import TypeVar
 from ..data.course import Course, FullCourse
 from tqdm.auto import tqdm
 from ..utils.grader import Grader
+import sys
+import warnings
 
 D = TypeVar('D', bound=Course)
+
+class Warning ():
+    def __init__(self, logger) -> None:
+        self.logger = logger
+
+    def __call__(self, *args, **kwds):
+        self.logger.warning(warnings.formatwarning(*args, **kwds))
 
 class Learner (metaclass=ABCMeta):
     r'''Base class for all learners
