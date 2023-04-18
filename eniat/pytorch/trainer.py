@@ -330,27 +330,26 @@ class TorchDistributedTrainer(TorchTrainer):
         print(current_process().name)
         self.prepare(device, 'fit')
         current_step = 0
-        with _stdout() as stdout:
-            for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=stdout, dynamic_ncols=True)):
-                for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent, file=stdout, dynamic_ncols=True)):
-                    batch = self.to_tensor(batch)
-                    tr_loss = self.learner.fit(batch, device, self.log)
-                    self.learner.opt.zero_grad()
-                    tr_loss.backward()
-                    self.learner.opt.step()
-                    step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
-                    step_bar.set_postfix(step_postfix)
-                    # Step Log
-                    self.log.log_state(step_postfix)
-                    # Step Eval
+        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=stdout, dynamic_ncols=True)):
+            for batch in (step_bar:=tqdm(self.loader, desc='Batch', unit='step', position=1, leave=False, disable=silent, file=stdout, dynamic_ncols=True)):
+                batch = self.to_tensor(batch)
+                tr_loss = self.learner.fit(batch, device, self.log)
+                self.learner.opt.zero_grad()
+                tr_loss.backward()
+                self.learner.opt.step()
+                step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
+                step_bar.set_postfix(step_postfix)
+                # Step Log
+                self.log.log_state(step_postfix)
+                # Step Eval
 
-                    # Step Save
-                    if self.unit == 'step' and current_step % self.conf.save_interval == 0:
-                        self._save_checkpoint(current_step, 'step')
-                    current_step += 1
-                self.learner.sch.step()
-                self.log.info(f"Epoch {epoch} finished")
-                #self.log.log_state()
+                # Step Save
+                if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                    self._save_checkpoint(current_step, 'step')
+                current_step += 1
+            self.learner.sch.step()
+            self.log.info(f"Epoch {epoch} finished")
+            #self.log.log_state()
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
