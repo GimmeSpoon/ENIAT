@@ -2,6 +2,7 @@ from typing import TypeVar, Literal, Callable
 from ..base import Trainer, Warning
 from ..data.course import Course, FullCourse
 from .learner import TorchLearner
+from ..utils.statelogger import StateLogger
 from tqdm.auto import tqdm
 from tqdm.contrib import DummyTqdmFile
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -24,7 +25,6 @@ from hydra.utils import instantiate
 from importlib import import_module
 from contextlib import contextmanager
 import warnings
-import logging
 
 T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
@@ -50,7 +50,6 @@ class TorchTrainer(Trainer):
     Automatically manage trainign step, logging, and saving checkpoints. Takse one task, one dataset, and one learner for any run. For several tasks, you can initiate the same number of Trainers."""
     def __init__(self, course: C = None, learner: T = None, conf=None, grader=None, logger=None) -> None:
         super().__init__(course, learner, conf, grader, logger)
-        self.log = logging.getLogger('eniat')
         warnings.showwarning = Warning(self.log)
 
     def rand_all(self, seed):
@@ -200,7 +199,7 @@ class TorchDistributedTrainer(TorchTrainer):
         self.learner_conf = learner_conf
         self.data_conf = data_conf
 
-        self.log = logging.getLogger('eniat')
+        self.log = StateLogger('eniat')
 
         self.seed = conf.seed
         self.unit = conf.unit
