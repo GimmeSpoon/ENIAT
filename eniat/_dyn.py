@@ -1,5 +1,4 @@
 from omegaconf import DictConfig, OmegaConf
-from hydra import compose, initialize
 from hydra.utils import instantiate
 import os
 import sys
@@ -33,13 +32,6 @@ def conf_instantiate(options:DictConfig):
         return _cls(**options)
     else:
         raise ValueError(f"Instantiation failed. Current config is not valid: {options}")
-
-def init_conf(global_config_path:str, job_name:str="eniat", version_base=None):
-    # Global Config
-    with initialize(version_base=version_base, config_path=global_config_path, job_name=job_name):
-        cfg = compose(config_name="eniat")
-        print(cfg)
-    return cfg
 
 def _merge_conf_by_path(conf:DictConfig, paths:Union[str,Sequence[str]]) -> DictConfig:
 
