@@ -327,6 +327,7 @@ class TorchDistributedTrainer(TorchTrainer):
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
+        silent = device == 0 and silent
         self.prepare(device, 'fit')
         current_step = 0
         for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Training', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, dynamic_ncols=True)):
