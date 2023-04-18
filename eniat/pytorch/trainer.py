@@ -250,6 +250,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 else:
                     return fn(self, *args)
             else:
+                print(current_process().name)
                 warnings.filterwarnings("ignore")
                 with self.log.silent():
                     return fn(self, *args)
