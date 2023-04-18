@@ -9,7 +9,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 import torch
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torch.multiprocessing import spawn
-from torch.distributed import init_process_group, destroy_process_group
+from torch.distributed import init_process_group, destroy_process_group, get_rank
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.optim import PostLocalSGDOptimizer, ZeroRedundancyOptimizer
 import torch.distributed.algorithms.model_averaging.averagers as averagers
@@ -246,6 +246,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 else:
                     return fn(self, *args)
             else:
+                print(current_process().name, get_rank())
                 if current_process().name == "SpawnProcess-1":
                     self.log.info("Custom Warning")
                     warnings.showwarning = Warning(self.log)
