@@ -234,7 +234,7 @@ class TorchDistributedTrainer(TorchTrainer):
 
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
-            self.log.debug(current_process().name)
+            print(get_rank())
             if current_process().name == "MainProcess":
                 warnings.showwarning = Warning(self.log)
                 if self._dist:
@@ -246,8 +246,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 else:
                     return fn(self, *args)
             else:
-                print(current_process().name, get_rank())
-                if current_process().name == "SpawnProcess-1":
+                if get_rank() == 0:
                     self.log.info("Custom Warning")
                     warnings.showwarning = Warning(self.log)
                     return fn(self, *args)
