@@ -251,9 +251,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 else:
                     self.log.info("warning ignored")
                     warnings.filterwarnings("ignore")
-                
-                with self.log.silent():
-                    return fn(self, *args)
+                return fn(self, *args)
         return wrapper
 
     def prepare (self, device:int, task:Literal['fit', 'eval', 'predict']):
