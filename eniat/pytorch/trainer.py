@@ -41,6 +41,8 @@ def _stdout():
             raise e
         finally:
             sys.stdout, sys.stderr = systream
+    else:
+        yield systream[0]
 
 class TorchTrainer(Trainer):
     r"""PyTorch compatible trainer class.
