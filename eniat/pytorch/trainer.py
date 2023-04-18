@@ -237,8 +237,6 @@ class TorchDistributedTrainer(TorchTrainer):
         else:
             raise ValueError("The type of distributed config must be one of the following literals: ['torchrun', 'DDP', 'none']")
 
-    warnings.showwarning()
-
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
             self.log.debug(current_process().name)
