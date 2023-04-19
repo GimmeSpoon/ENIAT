@@ -13,7 +13,7 @@ def get_course_instance(cfg:DictConfig, log=None):
             _courses.append(Course(label , conf_instantiate(cfg[label])))
             if log:
                 log.info(f"'{label}' data is loaded.")
-        elif 'path' in cfg[label] and cfg[label]['cls']:
+        elif 'path' in cfg[label] and cfg[label]['path']:
             _courses.append(course=Course(label, data=batch_load(cfg[label]['path'], cfg[label].type)))
             if log:
                 log.info(f"'{label}' data is loaded.")

@@ -46,20 +46,6 @@ def eniat(cfg: DictConfig) -> None:
             if cfg.trainer.distributed.type == "none" or cfg.trainer.distributed.type == "DP":
             
             # DATA LOAD
-                # _courses = FullCourse()
-                # log.info("Loading data...")
-                # for label in cfg.data:
-                #     if 'cls' in cfg.data[label]:
-                #         _courses.append(Course(label, conf_instantiate(cfg.data[label])))
-                #         log.info(f"'{label}' data is loaded.")
-                #     elif 'path' in cfg.data[label]:
-                #         _courses.append(course=Course(label, data=batch_load(cfg.data[label]['path'], cfg.data[label].type)))
-                #         log.info(f"'{label}' data is loaded.")
-                #     else:
-                #         log.warning(f"Data(:{label}) is not loaded because the path of data is not specified.")
-                # if not len(_courses):
-                #     log.warning("No data is given! Terminating the task...")
-                #     return
                 _courses = get_course_instance(cfg.data, log)
                 log.info('Loaded dataset.\n' + _courses.__repr__())
                 
