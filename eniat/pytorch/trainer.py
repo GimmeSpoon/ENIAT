@@ -25,6 +25,10 @@ from hydra.utils import instantiate
 from importlib import import_module
 from contextlib import contextmanager
 import warnings
+import logging
+import hydra
+from hydra.core.hydra_config import HydraConfig
+from hydra.core.utils import configure_log
 
 T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
@@ -246,6 +250,9 @@ class TorchDistributedTrainer(TorchTrainer):
                     return fn(self, *args)
             else:
                 if get_rank() == 0:
+                    hc = HydraConfig.get()
+                    print(configure_log(hc.job_logging, hc.verbose), "SS")
+                    #self.logger.console = logging.get_logger('eniat')
                     self.log.info("Custom Warning")
                     warnings.showwarning = Warning(self.log)
                     return fn(self, *args)

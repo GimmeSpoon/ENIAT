@@ -3,9 +3,6 @@ from logging import Logger
 from typing import Callable, Literal
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
-import hydra
-from hydra.core.hydra_config import HydraConfig
-from hydra.core.utils import configure_log
 import json
 
 class DummyLogger():
@@ -51,8 +48,6 @@ class StateLogger():
 
     def __init__(self, name: str, level = 0, conf:DictConfig = None) -> None:
         self.conf = conf
-        hydra_conf = HydraConfig.get()
-        configure_log(hydra_conf.job_logging, hydra_conf.verbose)
         self.console = logging.getLogger(name)
         self.console.setLevel(level)
         self.unit = conf.unit
