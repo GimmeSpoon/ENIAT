@@ -240,20 +240,21 @@ class TorchDistributedTrainer(TorchTrainer):
 
     def prepare (self, device:int, task:Literal['fit', 'eval', 'predict']):
         # data
-        self.course = FullCourse()
-        cfg = self.data_conf
-        for label in cfg:
-            if 'cls' in cfg[label]:
-                self.course.append(Course(label, conf_instantiate(cfg[label])))
-                self.log.info(f"'{label}' data is loaded")
-            elif 'path' in cfg[label]:
-                self.course.append(course=Course(label, data=batch_load(cfg[label]['path'], cfg[label].type)))
-                self.log.info(f"'{label}' data is loaded.")
-            else:
-                self.log.warning(f"Data(:{label}) is not loaded because the path of data is not specified.")
-        if not len(self.course):
-            self.log.warning("No data is given! Terminating the task...")
-            return
+        self.course = get_course_instance(self.data_conf, self.log)
+        # self.course = FullCourse()
+        # cfg = self.data_conf
+        # for label in cfg:
+        #     if 'cls' in cfg[label]:
+        #         self.course.append(Course(label, conf_instantiate(cfg[label])))
+        #         self.log.info(f"'{label}' data is loaded")
+        #     elif 'path' in cfg[label]:
+        #         self.course.append(course=Course(label, data=batch_load(cfg[label]['path'], cfg[label].type)))
+        #         self.log.info(f"'{label}' data is loaded.")
+        #     else:
+        #         self.log.warning(f"Data(:{label}) is not loaded because the path of data is not specified.")
+        # if not len(self.course):
+        #     self.log.warning("No data is given! Terminating the task...")
+        #     return
 
         self.course = get_course_instance(self.data_conf, self.log)
         self.loader = self.get_loader(task)
