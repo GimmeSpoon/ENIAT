@@ -115,76 +115,64 @@ class TorchTrainer(Trainer):
     def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
         return DataLoader(self.course.get_dataset(dataset), num_workers=self.conf.num_workers)
 
-    def fit(self, device:int, silent:bool=False):
+    @staticmethod
+    def to_tensor(batch):
+        if isinstance(batch, list):
+            for data in batch:
+                if isinstance(data, np.ndarray):
+                    data = torch.from_numpy(data)
+        elif isinstance(batch, np.ndarray):
+            batch = torch.from_numpy(data)
+        return batch
+
+    def fit(self, device:int=0, silent:bool=False):
+        loader = self.get_loader('fit')
         current_step = 0
-        self.info("test")
-        with _stdout() as stdout:
-            for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent, file=stdout, dynamic_ncols=True)):
-                for batch in (step_bar:=tqdm(self.loader, desc='Steps', unit='step', position=1, leave=False, disable=silent, _file=_stdout)):
+        with logging_redirect_tqdm():
+            for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
+                for batch in (step_bar:=tqdm(loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
                     batch = self.to_tensor(batch)
                     tr_loss = self.learner.fit(batch, device, self.log)
                     self.learner.opt.zero_grad()
                     tr_loss.backward()
                     self.learner.opt.step()
                     step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
-                    step_bar.set_postfix(step_postfix)
-                    # Step Log
                     self.log.log_state(step_postfix)
-                    # Step Eval
-                    # Step Save
-                    if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                    step_postfix['training_loss'] = '{3.f}'.format(step_postfix['training_loss'])
+                    step_bar.set_postfix(step_postfix)
+                    if self.conf.unit == 'step' and current_step % self.conf.save_interval == 0:
                         self._save_checkpoint(current_step, 'step')
                     current_step += 1
-                self.learner.sch.step()
+                if self.learner.sch:
+                    self.learner.sch.step()
                 self.log.info(f"Epoch {epoch} finished")
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
-    def eval(self, device:int, silent:bool=False):
-        current_step = 0
-        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
-            for batch in (step_bar:=tqdm(self.loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
-                batch = self.to_tensor(batch)
-                tr_loss = self.learner.fit(batch, device, self.log)
-                self.learner.opt.zero_grad()
-                tr_loss.backward()
-                self.learner.opt.step()
-                step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
-                step_bar.set_postfix(step_postfix)
-                # Step Log
-                self.log.log_state(step_postfix)
-                # Step Eval
-                # Step Save
-                if self.unit == 'step' and current_step % self.conf.save_interval == 0:
-                    self._save_checkpoint(current_step, 'step')
-                current_step += 1
-            self.learner.epoch()
-            self.log.info(f"Epoch {epoch} finished")
+    def eval(self, device:int=0, silent:bool=False):
+        loader = self.get_loader('eval')
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
-    def predict(self, device:int, silent:bool=False):
+    def predict(self, device:int=0, silent:bool=False):
+        loader = self.get_loader('predict')
         current_step = 0
-        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
-            for batch in (step_bar:=tqdm(self.loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
-                batch = self.to_tensor(batch)
-                tr_loss = self.learner.fit(batch, device, self.log)
-                self.learner.opt.zero_grad()
-                tr_loss.backward()
-                self.learner.opt.step()
-                step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
-                step_bar.set_postfix(step_postfix)
-                # Step Log
-                self.log.log_state(step_postfix)
-                # Step Eval
-                #self.grader.compute()
-                # Step Save
-                if self.unit == 'step' and current_step % self.conf.save_interval == 0:
-                    self._save_checkpoint(current_step, 'step')
-                current_step += 1
-            self.learner.epoch()
-            self.log.info(f"Epoch {epoch} finished")
-            #self.log.log_state()
+        for batch in (step_bar:=tqdm(loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
+            batch = self.to_tensor(batch)
+            tr_loss = self.learner.fit(batch, device, self.log)
+            self.learner.opt.zero_grad()
+            tr_loss.backward()
+            self.learner.opt.step()
+            step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
+            step_bar.set_postfix(step_postfix)
+            # Step Log
+            self.log.log_state(step_postfix)
+            # Step Eval
+            #self.grader.compute()
+            # Step Save
+            if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                self._save_checkpoint(current_step, 'step')
+            current_step += 1
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
@@ -312,16 +300,6 @@ class TorchDistributedTrainer(TorchTrainer):
             self.learner = getattr(import_module('.pytorch.learner', 'eniat'), cfg.cls)(model, loss, optim, schlr, cfg.resume, cfg.resume_path)
         if self.learner:
             self.log.info("Learner instance created.")
-    
-    @staticmethod
-    def to_tensor(batch):
-        if isinstance(batch, list):
-            for data in batch:
-                if isinstance(data, np.ndarray):
-                    data = torch.from_numpy(data)
-        elif isinstance(batch, np.ndarray):
-            batch = torch.from_numpy(data)
-        return batch
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
@@ -329,26 +307,23 @@ class TorchDistributedTrainer(TorchTrainer):
         self.prepare(device, 'fit')
         current_step = 0
 
-        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
-            for batch in (step_bar:=tqdm(self.loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
-                batch = self.to_tensor(batch)
-                tr_loss = self.learner.fit(batch, device, self.log)
-                self.learner.opt.zero_grad()
-                tr_loss.backward()
-                self.learner.opt.step()
-                step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
-                step_bar.set_postfix(step_postfix)
-                # Step Log
-                self.log.log_state(step_postfix)
-                # Step Eval
-
-                # Step Save
-                if self.unit == 'step' and current_step % self.conf.save_interval == 0:
-                    self._save_checkpoint(current_step, 'step')
-                current_step += 1
-            self.learner.sch.step()
-            self.log.info(f"Epoch {epoch} finished")
-            #self.log.log_state()
+        with logging_redirect_tqdm():
+            for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
+                for batch in (step_bar:=tqdm(self.loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
+                    batch = self.to_tensor(batch)
+                    tr_loss = self.learner.fit(batch, device, self.log)
+                    self.learner.opt.zero_grad()
+                    tr_loss.backward()
+                    self.learner.opt.step()
+                    step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
+                    self.log.log_state(step_postfix)
+                    step_postfix['training_loss'] = '{3.f}'.format(step_postfix['training_loss'])
+                    step_bar.set_postfix(step_postfix)
+                    if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                        self._save_checkpoint(current_step, 'step')
+                    current_step += 1
+                self.learner.sch.step()
+                self.log.info(f"Epoch {epoch} finished")
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
@@ -393,7 +368,7 @@ class TorchDistributedTrainer(TorchTrainer):
             outputs = torch.cat((outputs, output), dim=0)
 
         if final and dist.is_initialized():
-            destroy_process_group()
+            dist.destroy_process_group()
 
         return outputs
 
