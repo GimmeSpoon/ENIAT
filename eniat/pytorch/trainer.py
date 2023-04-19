@@ -138,7 +138,7 @@ class TorchTrainer(Trainer):
                     self.learner.opt.step()
                     step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
                     self.log.log_state(step_postfix)
-                    step_postfix['training_loss'] = '{3.f}'.format(step_postfix['training_loss'])
+                    step_postfix['training_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
                     step_bar.set_postfix(step_postfix)
                     if self.conf.unit == 'step' and current_step % self.conf.save_interval == 0:
                         self._save_checkpoint(current_step, 'step')
@@ -165,11 +165,7 @@ class TorchTrainer(Trainer):
             self.learner.opt.step()
             step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
             step_bar.set_postfix(step_postfix)
-            # Step Log
             self.log.log_state(step_postfix)
-            # Step Eval
-            #self.grader.compute()
-            # Step Save
             if self.unit == 'step' and current_step % self.conf.save_interval == 0:
                 self._save_checkpoint(current_step, 'step')
             current_step += 1
@@ -317,7 +313,7 @@ class TorchDistributedTrainer(TorchTrainer):
                     self.learner.opt.step()
                     step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
                     self.log.log_state(step_postfix)
-                    step_postfix['training_loss'] = '{3.f}'.format(step_postfix['training_loss'])
+                    step_postfix['training_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
                     step_bar.set_postfix(step_postfix)
                     if self.unit == 'step' and current_step % self.conf.save_interval == 0:
                         self._save_checkpoint(current_step, 'step')
