@@ -212,7 +212,7 @@ class TorchDistributedTrainer(TorchTrainer):
         self.init_step = conf.init_step
         self.max_step = conf.max_step
         
-    def dist_init(self, local_rank:int, fname:str) -> None:
+    def _ddp_init(self, local_rank:int, fname:str, _hc=None) -> None:
         self.log.debug("Spawn entry entered")
         if self.conf.distributed.debug:
             os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
@@ -236,22 +236,29 @@ class TorchDistributedTrainer(TorchTrainer):
         else:
             raise ValueError("The type of distributed config must be one of the following literals: ['torchrun', 'DDP', 'none']")
 
+    def _torchrun_init(self, local_rank):
+        self.log.info("setting torchrun environment...")
+        local_size = self.conf.distributed.local_size = int(os.environ['LOCAL_WORLD_SIZE'])
+        self.conf.distributed.local_rank = int(os.environ['LOCAL_RANK'])
+        self.conf.distributed.global_rank = int(os.environ['RANK'])
+        self.conf.distributed.world_size = int(os.environ['WORLD_SIZE'])
+        init_process_group(backend=self.conf.distributed.backend)
+
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
             if not is_initialized():
                 warnings.showwarning = Warning(self.log)
                 if self._dist:
                     if self.conf.distributed.type == "DDP":
-                        if current_process().name == "MainProcess":
-                            spawn(self.dist_init, (fn.__name__,), nprocs=self.conf.distributed.local_size, join=True)
+                        spawn(self._ddp_init, (fn.__name__, hc.config), nprocs=self.conf.distributed.local_size, join=True)
                     elif self.conf.distirbuted.type == "torchrun":
-                        return self.dist_init(self, int(os.environ['LOCAL_RANK']), fn.__name__)
+                        self._torchrun_init(self)
+                        return fn(os.environ['LOCAL_RANK'], os.environ['RANK'])
                 else:
                     return fn(self, *args)
             else:
                 if get_rank() == 0:
-                    print(os.getcwd())
-                    init_conf()
+                    
                     hc = HydraConfig.get()
                     print(configure_log(hc.job_logging, hc.verbose), "SS")
                     self.log.info("Custom Warning")
