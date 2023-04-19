@@ -6,9 +6,9 @@ import pkg_resources
 import os
 from importlib import import_module
 from shutil import copytree, ignore_patterns
-from .utils.cli import introduce, help
+from .utils.cli import introduce
 from ._dyn import _dynamic_load, _dynamic_import, _merge_conf_by_path, conf_instantiate
-from .data.course import FullCourse, Course, batch_load
+from .data.course import FullCourse, Course, get_course_instance
 
 version_base = None
 eniat_path = os.path.abspath(pkg_resources.resource_filename(__name__, 'config'))
@@ -29,9 +29,6 @@ def eniat(cfg: DictConfig) -> None:
         copytree(eniat_path, './config', ignore=ignore_patterns('*.yaml'))
         print("Config files copied to current directory.")
         return
-    elif cfg.do == 'help':
-        help()
-        return
 
     log = getattr(import_module('.utils.statelogger', 'eniat'), cfg.log.type)(__name__, cfg.log.level, conf=cfg.log)
 
@@ -44,26 +41,27 @@ def eniat(cfg: DictConfig) -> None:
         # Torch
         if cfg.trainer.type == "torch":
 
-            log.info(f"Task based on PyTorch.")
+            log.info(f"Initiating an experiment based on PyTorch.")
 
             if cfg.trainer.distributed.type == "none" or cfg.trainer.distributed.type == "DP":
             
             # DATA LOAD
-                _courses = FullCourse()
-                log.info("Loading data...")
-                for label in cfg.data:
-                    if 'cls' in cfg.data[label]:
-                        _courses.append(Course(label, conf_instantiate(cfg.data[label])))
-                        log.info(f"'{label}' data is loaded.")
-                    elif 'path' in cfg.data[label]:
-                        _courses.append(course=Course(label, data=batch_load(cfg.data[label]['path'], cfg.data[label].type)))
-                        log.info(f"'{label}' data is loaded.")
-                    else:
-                        log.warning(f"Data(:{label}) is not loaded because the path of data is not specified.")
-                if not len(_courses):
-                    log.warning("No data is given! Terminating the task...")
-                    return
-                log.info('Loaded dataset info\n' + _courses.__repr__())
+                # _courses = FullCourse()
+                # log.info("Loading data...")
+                # for label in cfg.data:
+                #     if 'cls' in cfg.data[label]:
+                #         _courses.append(Course(label, conf_instantiate(cfg.data[label])))
+                #         log.info(f"'{label}' data is loaded.")
+                #     elif 'path' in cfg.data[label]:
+                #         _courses.append(course=Course(label, data=batch_load(cfg.data[label]['path'], cfg.data[label].type)))
+                #         log.info(f"'{label}' data is loaded.")
+                #     else:
+                #         log.warning(f"Data(:{label}) is not loaded because the path of data is not specified.")
+                # if not len(_courses):
+                #     log.warning("No data is given! Terminating the task...")
+                #     return
+                _courses = get_course_instance(cfg.data, log)
+                log.info('Loaded dataset.\n' + _courses.__repr__())
                 
                 # instantiate learner components
 
@@ -122,7 +120,7 @@ def eniat(cfg: DictConfig) -> None:
         # Scikit-learn
         if cfg.trainer.type == "scikit":
 
-            log.info(f"Task based on Scikit-learn.")
+            log.info(f"Initiating an experiment based on Scikit-learn.")
             model = instantiate(cfg.learner.model)
 
             trainer = _dynamic_load('ScikitTrainer', '.scikit')

@@ -9,11 +9,11 @@ T_co = TypeVar('T_co', covariant=True)
 def get_course_instance(cfg:DictConfig, log=None):
     _courses = FullCourse()
     for label in cfg:
-        if 'cls' in cfg[label]:
+        if 'cls' in cfg[label] and cfg[label]['cls']:
             _courses.append(Course(label , conf_instantiate(cfg[label])))
             if log:
                 log.info(f"'{label}' data is loaded.")
-        elif 'path' in cfg[label]:
+        elif 'path' in cfg[label] and cfg[label]['cls']:
             _courses.append(course=Course(label, data=batch_load(cfg[label]['path'], cfg[label].type)))
             if log:
                 log.info(f"'{label}' data is loaded.")

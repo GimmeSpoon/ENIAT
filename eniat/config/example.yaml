@@ -2,9 +2,12 @@ defaults:
   - eniat
   - _self_
 
-log:
+resume_dir: '/home/user/training_state/221225/'
+keep_origin_path: False
+
+logger:
   type: StateLogger
-  level: 0
+  level: 10
   unit: epoch
   interval: 1
   mlflow:
@@ -21,18 +24,24 @@ data:
       - ./data/numpy.npy
       - ./data/numpy2.npy
     type: npy
+
 trainer:
 
   task: train
   type: torch
-  resume: True
-  resume_dir: '/home/user/training_state/221225/'
+  label: []
 
   seed: 666
   batch_size: 1000
-
   max_step: 100
   unit: epoch
+  save_interval: 1
+  save_after_eval: True
+
+  eval:
+    methods: []
+    unit: epoch
+    interval: 1
 
   distributed:
      type: DDP
@@ -47,9 +56,6 @@ trainer:
 
 learner:
   cls: SupremeLearner
-  path:
-  resume: False
-  resume_path:
   model:
     cls: MyNet
     path: ./model_test.py

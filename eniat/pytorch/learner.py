@@ -19,7 +19,7 @@ class TorchLearner(Learner, Generic[T_co]):
         self.sch = scheduler
 
         if resume:
-            self.load_model(resume_path)
+            self.load_model(path=resume_path)
 
     @abstractmethod
     def fit(self, batch:Tensor, device:int, logger):
@@ -70,4 +70,7 @@ class SupremeLearner (TorchLearner):
         return self.loss_fn(pred, y)
     
     def predict(self, batch: Tensor, device: int, logger):
-        return super().predict(batch, device, logger)
+        batch = batch.to(device)
+        model = self.model.to(device)
+        pred = model(x)
+        return pred
