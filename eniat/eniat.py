@@ -1,7 +1,8 @@
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
 from hydra import compose, initialize
 from hydra.utils import instantiate
+from hydra.core.hydra_config import HydraConfig
 import pkg_resources
 import os
 from importlib import import_module
@@ -28,9 +29,8 @@ def eniat(cfg: DictConfig) -> None:
     if cfg.do == 'init':
         copytree(eniat_path, './config', ignore=ignore_patterns('*.yaml'))
         print("Config files copied to current directory.")
-        return
 
-    log = getattr(import_module('.utils.statelogger', 'eniat'), cfg.log.type)(__name__, cfg.log.level, conf=cfg.log)
+    log = getattr(import_module('.utils.statelogger', 'eniat'), cfg.logger.type)(__name__, cfg.logger.level, conf=cfg.logger)
 
     introduce()
     print("===============CONFIG================")
@@ -88,7 +88,7 @@ def eniat(cfg: DictConfig) -> None:
                 # instantiate trainer
                 trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchTrainer')(course=_courses, learner=learner, conf=cfg.trainer, logger=log)
             else:
-                trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchDistributedTrainer')(conf=cfg.trainer, data_conf=cfg.data, learner_conf=cfg.learner, logger_conf=cfg.log)
+                trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchDistributedTrainer')(conf=cfg.trainer, data_conf=cfg.data, learner_conf=cfg.learner, logger_conf=cfg.logger)
                 log.info("Distributed Learning (Torch) is configured.")
             
             if trainer:

@@ -1,6 +1,6 @@
 defaults:
   - data: default_data
-  - log: default_logger
+  - logger: default_logger
   - trainer: default_trainer
   - learner: default_learner
   - grade: default_grade

@@ -331,8 +331,8 @@ class TorchDistributedTrainer(TorchTrainer):
         self.prepare(device, 'fit')
         current_step = 0
 
-        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Epochch   ', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
-            for batch in (step_bar:=tqdm(self.loader, desc='Training step', unit='step', position=1, leave=False, disable=silent)):
+        for epoch in (epoch_bar:=tqdm(range(self.init_step, self.max_step if self.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.unit != 'epoch' else silent)):
+            for batch in (step_bar:=tqdm(self.loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
                 batch = self.to_tensor(batch)
                 tr_loss = self.learner.fit(batch, device, self.log)
                 self.learner.opt.zero_grad()
@@ -388,7 +388,7 @@ class TorchDistributedTrainer(TorchTrainer):
         self.prepare(device, 'predict')
         # Steps Inference
         outputs = None
-        for batch in tqdm(self.loader, unit='Steps', position=1, disable=silent):
+        for batch in tqdm(self.loader, unit='step', position=1, disable=silent):
             output = self.learner.predict(batch)
             if not outputs:
                 outputs = torch.empty((0, *output.shape[1:]))
