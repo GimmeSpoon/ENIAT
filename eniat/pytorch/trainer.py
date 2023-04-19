@@ -7,9 +7,9 @@ from tqdm.auto import tqdm
 from tqdm.contrib import DummyTqdmFile
 from tqdm.contrib.logging import logging_redirect_tqdm
 import torch
+import torch.distributed as dist
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torch.multiprocessing import spawn
-from torch.distributed import init_process_group, destroy_process_group, get_rank, is_initialized
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.optim import PostLocalSGDOptimizer, ZeroRedundancyOptimizer
 import torch.distributed.algorithms.model_averaging.averagers as averagers
@@ -213,54 +213,37 @@ class TorchDistributedTrainer(TorchTrainer):
         self.max_step = conf.max_step
         
     def _ddp_init(self, local_rank:int, fname:str, _hc=None) -> None:
-        self.log.debug("Spawn entry entered")
-        if self.conf.distributed.debug:
-            os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
-            os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-        if self.conf.distributed.type == "torchrun":
-            self.log.info("setting torchrun environment...")
-            local_size = self.conf.distributed.local_size = int(os.environ['LOCAL_WORLD_SIZE'])
-            self.conf.distributed.local_rank = int(os.environ['LOCAL_RANK'])
-            self.conf.distributed.global_rank = int(os.environ['RANK'])
-            self.conf.distributed.world_size = int(os.environ['WORLD_SIZE'])
-            init_process_group(backend=self.conf.distributed.backend)
-            getattr(self, fname)(self.conf.distributed.local_rank)
-        elif self.conf.distributed.type == "DDP":
-            self.log.info("setting DDP environment...")
-            os.environ["LOCAL_RANK"] = str(local_rank)
-            os.environ["MASTER_ADDR"] = self.conf.distributed.master_address
-            os.environ["MASTER_PORT"] = self.conf.distributed.master_port
-            rank = self.conf.distributed.global_rank + local_rank
-            init_process_group(backend=self.conf.distributed.backend, world_size=self.conf.distributed.world_size, rank=rank)
-            return getattr(self, fname)(local_rank)
-        else:
-            raise ValueError("The type of distributed config must be one of the following literals: ['torchrun', 'DDP', 'none']")
+        configure_log(_hc.job_logging, _hc.verbose)
+        self.log.info("setting DDP environment...")
+        os.environ["LOCAL_RANK"] = str(local_rank)
+        os.environ["MASTER_ADDR"] = self.conf.distributed.master_address
+        os.environ["MASTER_PORT"] = self.conf.distributed.master_port
+        rank = self.conf.distributed.global_rank + local_rank
+        dist.init_process_group(backend=self.conf.distributed.backend, world_size=self.conf.distributed.world_size, rank=rank)
+        return getattr(self, fname)(local_rank)
 
-    def _torchrun_init(self, local_rank):
+    def _torchrun_init(self):
         self.log.info("setting torchrun environment...")
-        local_size = self.conf.distributed.local_size = int(os.environ['LOCAL_WORLD_SIZE'])
+        self.conf.distributed.local_size = int(os.environ['LOCAL_WORLD_SIZE'])
         self.conf.distributed.local_rank = int(os.environ['LOCAL_RANK'])
         self.conf.distributed.global_rank = int(os.environ['RANK'])
         self.conf.distributed.world_size = int(os.environ['WORLD_SIZE'])
-        init_process_group(backend=self.conf.distributed.backend)
+        dist.init_process_group(backend=self.conf.distributed.backend)
 
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
-            if not is_initialized():
+            if not dist.is_initialized():
+                if self.conf.distributed.debug:
+                    os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
+                    os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
                 warnings.showwarning = Warning(self.log)
-                if self._dist:
-                    if self.conf.distributed.type == "DDP":
-                        spawn(self._ddp_init, (fn.__name__, hc.config), nprocs=self.conf.distributed.local_size, join=True)
-                    elif self.conf.distirbuted.type == "torchrun":
-                        self._torchrun_init(self)
-                        return fn(os.environ['LOCAL_RANK'], os.environ['RANK'])
+                if dist.is_torchelastic_launched():
+                    self._torchrun_init(self)
+                    return fn(int(os.environ['LOCAL_RANK']), int(os.environ['RANK']))
                 else:
-                    return fn(self, *args)
+                    spawn(self._ddp_init, (fn.__name__, HydraConfig.get()), nprocs=self.conf.distributed.local_size, join=True)
             else:
-                if get_rank() == 0:
-                    
-                    hc = HydraConfig.get()
-                    print(configure_log(hc.job_logging, hc.verbose), "SS")
+                if dist.get_rank() == 0:
                     self.log.info("Custom Warning")
                     warnings.showwarning = Warning(self.log)
                     return fn(self, *args)
@@ -369,8 +352,8 @@ class TorchDistributedTrainer(TorchTrainer):
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
-        if self.distributed:
-            destroy_process_group()
+        if dist.is_initialized():
+            dist.destroy_process_group()
 
     @distributed
     def eval(self, device:int, final:bool=False, silent:bool=False):
@@ -388,8 +371,8 @@ class TorchDistributedTrainer(TorchTrainer):
                 whole_batch = torch.empty((0, *output.shape[1:]))
             whole_batch = torch.cat((whole_batch, output), dim=0)
 
-        if final and self.distributed:
-            destroy_process_group()
+        if final and dist.is_initialized():
+            dist.destroy_process_group()
 
         if self.eval_fn:
             return self.eval_fn(whole_batch)
@@ -409,7 +392,7 @@ class TorchDistributedTrainer(TorchTrainer):
                 outputs = torch.empty((0, *output.shape[1:]))
             outputs = torch.cat((outputs, output), dim=0)
 
-        if final and self.distributed:
+        if final and dist.is_initialized():
             destroy_process_group()
 
         return outputs
