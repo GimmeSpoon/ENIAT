@@ -1,9 +1,20 @@
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
+from hydra import compose, initialize
 import os
 import sys
+import pkg_resources
 from importlib.util import spec_from_file_location, module_from_spec
 from typing import Callable, Sequence, Union
+
+eniat_path = os.path.abspath(pkg_resources.resource_filename(__name__, 'config'))
+
+def init_conf(global_config_path:str=os.path.relpath(eniat_path, os.getcwd()), job_name:str="eniat", version_base=None):
+    # Global Config
+    with initialize(version_base=version_base, config_path=global_config_path, job_name=job_name):
+        cfg = compose(config_name="eniat")
+        print(cfg)
+    return cfg
 
 def _dynamic_import(path:str, name:str = None):
     _spec = spec_from_file_location(_bn:=name if name else os.path.basename(path), os.path.abspath(path))

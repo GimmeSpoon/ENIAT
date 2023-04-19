@@ -250,9 +250,10 @@ class TorchDistributedTrainer(TorchTrainer):
                     return fn(self, *args)
             else:
                 if get_rank() == 0:
+                    print(os.getcwd())
+                    init_conf()
                     hc = HydraConfig.get()
                     print(configure_log(hc.job_logging, hc.verbose), "SS")
-                    #self.logger.console = logging.get_logger('eniat')
                     self.log.info("Custom Warning")
                     warnings.showwarning = Warning(self.log)
                     return fn(self, *args)
