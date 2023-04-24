@@ -7,10 +7,7 @@ import sys
 import os
 from typing import Union, Sequence
 
-version_base = None
-eniat_path = os.path.abspath(pkg_resources.resource_filename('eniat', 'config'))
-
-def init_conf(global_config_path:str=os.path.relpath(eniat_path, os.getcwd()), job_name:str="eniat", version_base=None):
+def init_conf(global_config_path:str, job_name:str="eniat", version_base=None):
     # Global Config
     with initialize(version_base=version_base, config_path=global_config_path, job_name=job_name):
         cfg = compose(config_name="eniat")
