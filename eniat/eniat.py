@@ -18,7 +18,7 @@ def eniat(cfg: DictConfig) -> None:
 
     cfg = _merge_conf_by_path(cfg, cfg.config)
 
-    if cfg.do == 'init':
+    if cfg.init:
         copytree(eniat_path, './config', ignore=ignore_patterns('*.yaml'))
         print("Config files copied to current directory.")
 

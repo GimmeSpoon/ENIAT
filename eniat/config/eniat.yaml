@@ -8,10 +8,12 @@ defaults:
   - override hydra/hydra_logging: colorlog
   - _self_
 
-do: # init, help
+init: False
 config: []
 silent: False
 output_dir: ./result
+working_dir: ${hydra.runtime.output_dir}
+
 hydra:
   job:
     name: eniat
