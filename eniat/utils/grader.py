@@ -46,30 +46,35 @@ def sk_eval(preds, gt, methods:Union[str, Sequence[str]], **kwargs):
     return ret
 
 class Grader():
-    def __init__(self, conf:DictConfig, methods:Union[Callable, Sequence[Callable]]) -> None:
+    
+    class Result():
+        def __init__(self) -> None:
+            pass
+    
+    def __init__(self, conf:DictConfig, methods:Union[str, Callable, Sequence[Union[str, Callable]]]) -> None:
         self.unit = conf.unit
         self.interval = conf.interval
+        self.methods = []
+        self.append_metric(methods)
+
+    def append_metric(self, method:Union[str, Callable, Sequence[Union[str, Callable]]]):
         if isinstance(methods, Callable):
             methods = [methods]
-        self.methods = list(methods)
+        elif isinstance(methods, str):
+            methods = [sk_metric[methods]]
+        else:
+            methods = []
+            for method in methods:
+                if isinstance(methods, Callable):
+                    methods.append(method)
+                else:
+                    methods.append(sk_metric[methods])
 
-    def append_metric(self, method:Callable):
-        self.methods.append(method)
-
-    def _stepfilter(fn:Callable) -> Callable:
-        def wrapper(self, pred, gt, timestep:int, unit:str, force:bool=False):
-            if not force and (self.unit != unit or timestep % self.interval):
-                return
-            return fn(self, pred, gt)
-        return wrapper
-
-    @_stepfilter
-    def compute(self, prediction:T_co, ground_truth:T_co) -> dict:
+    def compute(self, prediction:T_co, ground_truth:T_co, **kwargs) -> dict:
         result = {}
         for method in self.methods:
-            result[method.__name__]=method(prediction, ground_truth)
+            result[method.__name__]=method(prediction, ground_truth, **kwargs)
         return result
 
-    @_stepfilter
-    def __call__(self, prediction:T_co, ground_truth:T_co):
+    def __call__(self, prediction:T_co, ground_truth:T_co, **kwargs):
         self.compute(prediction, ground_truth)

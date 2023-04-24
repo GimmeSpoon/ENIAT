@@ -4,7 +4,6 @@ from ..data.course import Course, FullCourse
 from .learner import TorchLearner
 from ..utils.statelogger import StateLogger
 from tqdm.auto import tqdm
-from tqdm.contrib import DummyTqdmFile
 from tqdm.contrib.logging import logging_redirect_tqdm
 import torch
 import torch.distributed as dist
@@ -18,36 +17,74 @@ import os
 import random
 import numpy as np
 from omegaconf import DictConfig
-from multiprocessing import current_process
 from ..data.course import get_course_instance, batch_load
-from .._dyn import conf_instantiate, _dynamic_import
+from ..utils.conf import conf_instantiate, _dynamic_import
 from hydra.utils import instantiate
 from importlib import import_module
-from contextlib import contextmanager
 import warnings
-import logging
-import hydra
 from hydra.core.hydra_config import HydraConfig
 from hydra.core.utils import configure_log
 
 T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
+L = TypeVar('L', bound=StateLogger)
 
-@contextmanager
-def _stdout():
-    systream = sys.stdout, sys.stderr
-    # IO (Main process)
-    if (_pname:=current_process().name) != "SpawnProcess-1" and _pname != "MainProcess":
-        try:
-            with open(os.devnull, 'w') as f:
-                sys.stdout, sys.stderr = f, f
-                yield sys.stdout
-        except Exception as e:
-            raise e
-        finally:
-            sys.stdout, sys.stderr = systream
+def torchload(cfg:DictConfig, log:L):
+
+    log.info(f"Initiating an experiment based on PyTorch.")
+
+    if cfg.trainer.distributed.type == "none" or cfg.trainer.distributed.type == "DP":
+    
+    # DATA LOAD
+        _courses = get_course_instance(cfg.data, log)
+        log.info('Loaded dataset.\n' + _courses.__repr__())
+        
+        # instantiate learner components
+
+        # Model Load
+        model = conf_instantiate(cfg.learner.model)
+        log.info("Model loaded...")
+
+        if not cfg.learner.resume:
+            log.warning("'resume' is set to False. The model will be initialized without loading a checkpoint.")
+        # loss
+        loss = instantiate(cfg.learner.loss) if cfg.learner.loss and cfg.learner.loss._target_ else None
+        if loss:
+            log.info("Loss function loaded...")
+        else:
+            log.warning("Loss function is not defined. Are you sure you wanted this?")
+        # optimizer
+        optim = instantiate(cfg.learner.optimizer, params=model.parameters()) if cfg.learner.optimizer and cfg.learner.optimizer._target_ else None
+        if optim:
+            log.info("Optimizer loaded...")
+        else:
+            log.warning("Optimizer is not defined. Are you sure you wanted this?")
+        # scheduler
+        schlr = None# instantiate(cfg.learner.scheduler, lr_lambda=lambda x: x**cfg.learner.scheduler.lr_lambda, optimizer=optim) if cfg.learner.scheduler and cfg.learner.scheduler._target_ else None
+        if schlr:
+            log.info("Scheduler loaded...")
+        else:
+            log.warning("Scheduler is not defined. Edit the configuration if this is not what you wanted.")
+        
+        # instantiate learner
+        if 'path' in cfg.learner and cfg.learner.path:
+            _mod, _bn = _dynamic_import(cfg.learner.path)
+            learner = getattr(_mod, cfg.learner.cls)(model, loss, optim, schlr, cfg.learner.resume, cfg.learner.resume_path)
+        else:
+            learner = getattr(import_module('.pytorch.learner', 'eniat'), cfg.learner.cls)(model, loss, optim, schlr, cfg.learner.resume, cfg.learner.resume_path)
+        if learner:
+            log.info("Learner instance created.")
+
+        # instantiate trainer
+        trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchTrainer')(course=_courses, learner=learner, conf=cfg.trainer, logger=log)
     else:
-        yield systream[0]
+        trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchDistributedTrainer')(conf=cfg.trainer, data_conf=cfg.data, learner_conf=cfg.learner, logger_conf=cfg.logger)
+        log.info("Distributed Learning (Torch) is configured.")
+    
+    if trainer:
+        log.info("Trainer instance created.")
+    
+    return learner, trainer
 
 class TorchTrainer(Trainer):
     r"""PyTorch compatible trainer class.
@@ -132,20 +169,22 @@ class TorchTrainer(Trainer):
             for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
                 for batch in (step_bar:=tqdm(loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
                     batch = self.to_tensor(batch)
+                    self.learner.model.train(True)
                     tr_loss = self.learner.fit(batch, device, self.log)
                     self.learner.opt.zero_grad()
                     tr_loss.backward()
                     self.learner.opt.step()
-                    step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step}
+                    self.learner.model.train(False)
+                    step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step+1}
                     self.log.log_state(step_postfix)
-                    step_postfix['training_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
+                    step_postfix['trainintorg_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
                     step_bar.set_postfix(step_postfix)
                     if self.conf.unit == 'step' and current_step % self.conf.save_interval == 0:
                         self._save_checkpoint(current_step, 'step')
                     current_step += 1
                 if self.learner.sch:
                     self.learner.sch.step()
-                self.log.info(f"Epoch {epoch} finished")
+                self.log.info(f"Epoch {epoch+1} finished")
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
@@ -241,22 +280,6 @@ class TorchDistributedTrainer(TorchTrainer):
     def prepare (self, device:int, task:Literal['fit', 'eval', 'predict']):
         # data
         self.course = get_course_instance(self.data_conf, self.log)
-        # self.course = FullCourse()
-        # cfg = self.data_conf
-        # for label in cfg:
-        #     if 'cls' in cfg[label]:
-        #         self.course.append(Course(label, conf_instantiate(cfg[label])))
-        #         self.log.info(f"'{label}' data is loaded")
-        #     elif 'path' in cfg[label]:
-        #         self.course.append(course=Course(label, data=batch_load(cfg[label]['path'], cfg[label].type)))
-        #         self.log.info(f"'{label}' data is loaded.")
-        #     else:
-        #         self.log.warning(f"Data(:{label}) is not loaded because the path of data is not specified.")
-        # if not len(self.course):
-        #     self.log.warning("No data is given! Terminating the task...")
-        #     return
-
-        self.course = get_course_instance(self.data_conf, self.log)
         self.loader = self.get_loader(task)
 
         # learner
@@ -320,7 +343,7 @@ class TorchDistributedTrainer(TorchTrainer):
                         self._save_checkpoint(current_step, 'step')
                     current_step += 1
                 self.learner.sch.step()
-                self.log.info(f"Epoch {epoch} finished")
+                self.log.info(f"Epoch {epoch+1} finished")
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 

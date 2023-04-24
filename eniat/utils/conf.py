@@ -1,13 +1,14 @@
 from omegaconf import DictConfig, OmegaConf
-from hydra.utils import instantiate
-from hydra import compose, initialize
-import os
-import sys
-import pkg_resources
 from importlib.util import spec_from_file_location, module_from_spec
-from typing import Callable, Sequence, Union
+from hydra import compose, initialize
+from hydra.utils import instantiate
+import pkg_resources
+import sys
+import os
+from typing import Union, Sequence
 
-eniat_path = os.path.abspath(pkg_resources.resource_filename(__name__, 'config'))
+version_base = None
+eniat_path = os.path.abspath(pkg_resources.resource_filename('eniat', 'config'))
 
 def init_conf(global_config_path:str=os.path.relpath(eniat_path, os.getcwd()), job_name:str="eniat", version_base=None):
     # Global Config
@@ -29,20 +30,20 @@ def _dynamic_load(name:str, path:str):
     _mod, _bn = _dynamic_import(path, name)
     return getattr(_mod, name)
 
-def conf_instantiate(options:DictConfig):
-    if not options:
+def conf_instantiate(path:str, conf:DictConfig):
+    if not conf:
         return None
-    if '_target_' in options:
-        return instantiate(options)
-    elif 'path' in options and 'cls' in options:
-        _cls = _dynamic_load(options.cls, options.path)
-        options = OmegaConf.to_container(options)
-        options.pop('_target_', None)
-        options.pop('path', None)
-        options.pop('cls', None)
-        return _cls(**options)
-    else:
-        raise ValueError(f"Instantiation failed. Current config is not valid: {options}")
+    if '_target_' in conf and conf['_target_']: #Hydra instance
+        return instantiate(conf)
+    elif 'path' in conf and conf['path']:
+        if 'cls' in conf and conf['cls']: #dynamic load
+            _cls = _dynamic_load(conf.cls, conf.path)
+            options = OmegaConf.to_container(conf)
+            options.pop('_target_', None)
+            options.pop('path', None)
+            options.pop('cls', None)
+            return _cls(**options)
+    raise ValueError(f"Instantiation failed. Current config is not valid: {options}")
 
 def _merge_conf_by_path(conf:DictConfig, paths:Union[str,Sequence[str]]) -> DictConfig:
 

@@ -25,6 +25,11 @@ data:
       - ./data/numpy2.npy
     type: npy
 
+grader:
+  methods: ['acc']
+  unit: epoch
+  interval: 1
+
 trainer:
 
   task: train
@@ -38,16 +43,11 @@ trainer:
   save_interval: 1
   save_after_eval: True
 
-  eval:
-    methods: []
-    unit: epoch
-    interval: 1
-
   distributed:
-     type: none
+     type: DDP
      debug: False
-     local_size: 1
-     world_size: 1
+     local_size: 2
+     world_size: 2
      master_address: 'localhost'
      master_port: '12345'
      backend: gloo

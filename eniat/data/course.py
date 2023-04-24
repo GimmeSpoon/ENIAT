@@ -2,7 +2,7 @@ from typing import Literal, Union, Callable, TypeVar, Sequence
 import numpy as np
 import pickle as pk
 from omegaconf import DictConfig
-from .._dyn import conf_instantiate
+from ..utils.conf import conf_instantiate
 
 T_co = TypeVar('T_co', covariant=True)
 

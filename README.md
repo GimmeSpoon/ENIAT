@@ -1,5 +1,5 @@
-#  pyeniat 
+#  ENIAT
 
-machine learning framework for simple project or research
+
 
 
