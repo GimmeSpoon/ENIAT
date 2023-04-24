@@ -250,7 +250,7 @@ class TorchDistributedTrainer(TorchTrainer):
 
         if self._dist:
             model = DDP(model.to(device)).compile() if self.compile else DDP(model)
-            optim = self.get_dist_opt(self.conf.distributed.optimizer, learner.optim, model.parameters())
+            optim = self.get_dist_opt(self.conf.distributed.optimizer, learner.opt, model.parameters())
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
