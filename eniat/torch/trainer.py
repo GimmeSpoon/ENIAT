@@ -96,7 +96,7 @@ class TorchTrainer(Trainer):
         if not self.hc:
             self.hc = HydraConfig.get()
         Path(os.path.join(self.hc.runtime.output_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
-        torch.save(self.learner.model.state_dict(), os.path.join( self.conf.working_dir , f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
+        torch.save(self.learner.model.state_dict(), os.path.join( self.hc.runtime.output_dir , f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
 
     def _save_train_state(self, timestep:int) -> None:
         if not self.hc:
@@ -108,7 +108,7 @@ class TorchTrainer(Trainer):
         train_state['maxstep'] = self.max_step
         train_state['distributed'] = self._dist
         Path(os.path.join(self.hc.runtime.output_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
-        torch.save(train_state, os.path.join(self.conf.working_dir, f'checkpoints/state_{timestep}.cpt'))
+        torch.save(train_state, os.path.join(self.hc.runtime.output_dir, f'checkpoints/state_{timestep}.cpt'))
 
     def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
         if not force and (self.conf.unit != unit or (timestep % self.conf.save_interval) if self.conf.save_interval else True):
@@ -213,7 +213,7 @@ class TorchDistributedTrainer(TorchTrainer):
         os.environ["MASTER_PORT"] = self.conf.distributed.master_port
         rank = self.conf.distributed.global_rank + local_rank
         dist.init_process_group(backend=self.conf.distributed.backend, world_size=self.conf.distributed.world_size, rank=rank)
-        return getattr(self, fname)(local_rank)
+        return getattr(self, fname)(local_rank, rank)
 
     def _torchrun_init(self):
         self.log.info("setting torchrun environment...")
@@ -260,7 +260,7 @@ class TorchDistributedTrainer(TorchTrainer):
             optim = self.get_dist_opt(self.conf.distributed.optimizer, self.learner.opt, model.parameters())
 
     @distributed
-    def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
+    def fit(self, device:int=0, global_rank:int=0, silent:bool=False):
         silent = True if device != 0 else silent
         self.prepare(device, 'fit')
         current_step = 0
@@ -277,7 +277,7 @@ class TorchDistributedTrainer(TorchTrainer):
                     self.log.log_state(step_postfix)
                     step_postfix['training_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
                     step_bar.set_postfix(step_postfix)
-                    if self.unit == 'step' and current_step % self.conf.save_interval == 0:
+                    if self.unit == 'step' and current_step % self.conf.save_interval == 0 and global_rank == 0:
                         self._save_checkpoint(current_step, 'step')
                     current_step += 1
                 if self.learner.sch:
