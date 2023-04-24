@@ -44,7 +44,7 @@ def load_learner (conf, log):
         _mod, _bn = _dynamic_import(conf.path)
         learner = getattr(_mod, conf.cls)(model, loss, optim, schlr, conf.resume, conf.resume_path)
     else:
-        learner = getattr(import_module('.pytorch.learner', 'eniat'), conf.cls)(model, loss, optim, schlr, conf.resume, conf.resume_path)
+        learner = getattr(import_module('.torch.learner', 'eniat'), conf.cls)(model, loss, optim, schlr, conf.resume, conf.resume_path)
     if learner:
         log.info("Learner instance created.")
 
