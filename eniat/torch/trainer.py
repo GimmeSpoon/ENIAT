@@ -70,7 +70,7 @@ class TorchTrainer(Trainer):
         return {
             'cuda' : torch.cuda.get_rng_state_all() if self._dist else torch.cuda.get_rng_state(),
             'torch' : torch.get_rng_state(),
-            'numpy' : np.random.state(),
+            'numpy' : np.random.get_state(),
             'random' : random.getstate()
         }
     
