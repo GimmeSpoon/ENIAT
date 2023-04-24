@@ -15,19 +15,19 @@ O = TypeVar('O', bound=Optimizer)
 
 def load_learner (conf, log):
     # Model Load
-    model = conf_instantiate(conf.learner.model)
+    model = conf_instantiate(conf.model)
     log.info("Model loaded...")
 
-    if not conf.learner.resume:
+    if not conf.resume:
         log.warning("'resume' is set to False. The model will be initialized without loading a checkpoint.")
     # loss
-    loss = instantiate(conf.learner.loss) if conf.learner.loss and conf.learner.loss._target_ else None
+    loss = instantiate(conf.loss) if conf.loss and conf.loss._target_ else None
     if loss:
         log.info("Loss function loaded...")
     else:
         log.warning("Loss function is not defined. Are you sure you wanted this?")
     # optimizer
-    optim = instantiate(conf.learner.optimizer, params=model.parameters()) if conf.learner.optimizer and conf.learner.optimizer._target_ else None
+    optim = instantiate(conf.optimizer, params=model.parameters()) if conf.optimizer and conf.optimizer._target_ else None
     if optim:
         log.info("Optimizer loaded...")
     else:
@@ -40,11 +40,11 @@ def load_learner (conf, log):
         log.warning("Scheduler is not defined. Edit the configuration if this is not what you wanted.")
     
     # instantiate learner
-    if 'path' in conf.learner and conf.learner.path:
-        _mod, _bn = _dynamic_import(conf.learner.path)
-        learner = getattr(_mod, conf.learner.cls)(model, loss, optim, schlr, conf.learner.resume, conf.learner.resume_path)
+    if 'path' in conf and conf.path:
+        _mod, _bn = _dynamic_import(conf.path)
+        learner = getattr(_mod, conf.cls)(model, loss, optim, schlr, conf.resume, conf.resume_path)
     else:
-        learner = getattr(import_module('.pytorch.learner', 'eniat'), conf.learner.cls)(model, loss, optim, schlr, conf.learner.resume, conf.learner.resume_path)
+        learner = getattr(import_module('.pytorch.learner', 'eniat'), conf.cls)(model, loss, optim, schlr, conf.resume, conf.resume_path)
     if learner:
         log.info("Learner instance created.")
 
