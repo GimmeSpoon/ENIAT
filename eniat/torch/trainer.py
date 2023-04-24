@@ -245,12 +245,12 @@ class TorchDistributedTrainer(TorchTrainer):
         self.loader = self.get_loader(task)
 
         # learner
-        learner = load_learner(self.learner_conf, self.log)
-        model = learner.model
+        self.learner = load_learner(self.learner_conf, self.log)
+        model = self.learner.model
 
         if self._dist:
             model = DDP(model.to(device)).compile() if self.compile else DDP(model)
-            optim = self.get_dist_opt(self.conf.distributed.optimizer, learner.opt, model.parameters())
+            optim = self.get_dist_opt(self.conf.distributed.optimizer, self.learner.opt, model.parameters())
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):
