@@ -48,6 +48,8 @@ def load_learner (conf, log):
     if learner:
         log.info("Learner instance created.")
 
+    return learner
+
 class TorchLearner(Learner, Generic[T_co]):
     def __init__(self, model:Module, criterion=None, optimizer=None, scheduler=None, resume:bool=False, resume_path:str=None) -> None:
         super(TorchLearner).__init__()
