@@ -93,19 +93,21 @@ class TorchTrainer(Trainer):
         self.max_step = resumed['maxstep']
 
     def _save_model(self, timestep:int=None) -> None:
-        hc = HydraConfig.get()
-        Path(os.path.join(hc.runtime.output_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
+        if not self.hc:
+            self.hc = HydraConfig.get()
+        Path(os.path.join(self.hc.runtime.output_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
         torch.save(self.learner.model.state_dict(), os.path.join( self.conf.working_dir , f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
 
     def _save_train_state(self, timestep:int) -> None:
-        hc = HydraConfig.get()
+        if not self.hc:
+            self.hc = HydraConfig.get()
         train_state = self.learner.get_optimizer().state_dict()['optimizer']
         train_state['unit'] = self.unit
         train_state['rng_state'] = self.get_rand_state()
         train_state['timestep'] = timestep
         train_state['maxstep'] = self.max_step
         train_state['distributed'] = self._dist
-        Path(os.path.join(hc.runtime.output_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
+        Path(os.path.join(self.hc.runtime.output_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
         torch.save(train_state, os.path.join(self.conf.working_dir, f'checkpoints/state_{timestep}.cpt'))
 
     def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
@@ -204,6 +206,7 @@ class TorchDistributedTrainer(TorchTrainer):
         
     def _ddp_init(self, local_rank:int, fname:str, _hc=None) -> None:
         configure_log(_hc.job_logging, _hc.verbose)
+        self.hc = _hc
         self.log.info("setting DDP environment...")
         os.environ["LOCAL_RANK"] = str(local_rank)
         os.environ["MASTER_ADDR"] = self.conf.distributed.master_address
@@ -228,6 +231,7 @@ class TorchDistributedTrainer(TorchTrainer):
                     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
                 warnings.showwarning = Warning(self.log)
                 if dist.is_torchelastic_launched():
+                    self.hc = HydraConfig.get()
                     self._torchrun_init(self)
                     return fn(int(os.environ['LOCAL_RANK']), int(os.environ['RANK']))
                 else:
