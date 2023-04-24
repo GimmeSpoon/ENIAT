@@ -3,7 +3,7 @@ defaults:
   - logger: default_logger
   - trainer: default_trainer
   - learner: default_learner
-  - grade: default_grade
+  - grader: default_grade
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
   - _self_
