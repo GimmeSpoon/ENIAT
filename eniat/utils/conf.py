@@ -27,7 +27,7 @@ def _dynamic_load(name:str, path:str):
     _mod, _bn = _dynamic_import(path, name)
     return getattr(_mod, name)
 
-def conf_instantiate(path:str, conf:DictConfig):
+def conf_instantiate(conf:DictConfig):
     if not conf:
         return None
     if '_target_' in conf and conf['_target_']: #Hydra instance
