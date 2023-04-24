@@ -34,12 +34,12 @@ def eniat(cfg: DictConfig) -> None:
             log.info(f"Initiating an experiment based on PyTorch.")
 
             if cfg.trainer.distributed.type == "none" or cfg.trainer.distributed.type == "DP":
-            
-            # DATA LOAD
                 _courses = get_course_instance(cfg.data, log)
                 log.info('Loaded dataset.\n' + _courses.__repr__())
-                
                 learner, trainer = torchload(cfg, log)
+            else:
+                trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchDistributedTrainer')(conf=cfg.trainer, data_conf=cfg.data, learner_conf=cfg.learner, logger_conf=cfg.logger)
+                log.info("Distributed Learning (Torch) is configured.")
 
             if cfg.trainer.task == "fit" or cfg.trainer.task == "train":
                 trainer.fit()
