@@ -1,7 +1,7 @@
 import eniat
 import eniat.eniat
-from eniat.pytorch.trainer import TorchDistributedTrainer
-from eniat.pytorch.learner import TorchLearner
+from eniat.torch.trainer import TorchDistributedTrainer
+from eniat.torch.learner import TorchLearner
 from omegaconf import OmegaConf
 import torch
 import torch.nn as nn
