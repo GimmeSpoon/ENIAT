@@ -95,7 +95,7 @@ class TorchTrainer(Trainer):
     def _save_model(self, timestep:int=None) -> None:
         if not self.hc:
             self.hc = HydraConfig.get()
-        Path(os.path.join(self.hc.runtime.output_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
+        Path(os.path.join(self.hc.runtime.output_dir, 'checkpoints')).mkdir(parents=True, exist_ok=True)
         torch.save(self.learner.model.state_dict(), os.path.join( self.hc.runtime.output_dir , f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
 
     def _save_train_state(self, timestep:int) -> None:
