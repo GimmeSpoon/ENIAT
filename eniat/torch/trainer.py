@@ -93,7 +93,8 @@ class TorchTrainer(Trainer):
         self.max_step = resumed['maxstep']
 
     def _save_model(self, timestep:int=None) -> None:
-        torch.save(self.learner.model.state_dict(), os.path.join(os.getcwd(), f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
+        Path(os.path.join(self.conf.working_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
+        torch.save(self.learner.model.state_dict(), os.path.join( self.conf.working_dir , f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
 
     def _save_train_state(self, timestep:int) -> None:
         train_state = self.learner.get_optimizer().state_dict()['optimizer']
@@ -102,8 +103,8 @@ class TorchTrainer(Trainer):
         train_state['timestep'] = timestep
         train_state['maxstep'] = self.max_step
         train_state['distributed'] = self._dist
-        Path(self.conf.working_dir).mkdir(parents=True, exist_ok=True)
-        torch.save(train_state, os.path.join(Path(self.conf.working_dir), f'checkpoints/state_{timestep}.cpt'))
+        Path(os.path.join(self.conf.working_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
+        torch.save(train_state, os.path.join(self.conf.working_dir, f'checkpoints/state_{timestep}.cpt'))
 
     def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
         if not force and (self.conf.unit != unit or (timestep % self.conf.save_interval) if self.conf.save_interval else True):

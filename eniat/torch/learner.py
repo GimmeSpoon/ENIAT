@@ -9,6 +9,7 @@ from torch.optim import Optimizer
 from hydra.utils import instantiate
 from ..utils.conf import conf_instantiate, _dynamic_import
 from importlib import import_module
+from pathlib import Path
 
 T_co = TypeVar('T_co', covariant=True)
 O = TypeVar('O', bound=Optimizer)
