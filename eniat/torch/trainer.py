@@ -101,7 +101,8 @@ class TorchTrainer(Trainer):
     def _save_train_state(self, timestep:int) -> None:
         if not self.hc:
             self.hc = HydraConfig.get()
-        train_state = self.learner.opt.state_dict()['optimizer']
+        train_state = {}
+        train_state['optimizer'] = self.learner.opt.state_dict()
         train_state['unit'] = self.unit
         train_state['rng_state'] = self.get_rand_state()
         train_state['timestep'] = timestep
