@@ -12,18 +12,16 @@ from torch.multiprocessing import spawn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.optim import PostLocalSGDOptimizer, ZeroRedundancyOptimizer
 import torch.distributed.algorithms.model_averaging.averagers as averagers
-import sys
 import os
 import random
 import numpy as np
 from omegaconf import DictConfig
-from ..data.course import get_course_instance, batch_load
-from ..utils.conf import conf_instantiate, _dynamic_import
-from hydra.utils import instantiate
+from ..data.course import get_course_instance
 from importlib import import_module
 import warnings
 from hydra.core.hydra_config import HydraConfig
 from hydra.core.utils import configure_log
+from pathlib import Path
 
 T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
@@ -104,7 +102,8 @@ class TorchTrainer(Trainer):
         train_state['timestep'] = timestep
         train_state['maxstep'] = self.max_step
         train_state['distributed'] = self._dist
-        torch.save(train_state, os.path.join(os.getcwd(), f'checkpoints/state_{timestep}.cpt'))
+        Path(self.conf.working_dir).mkdir(parents=True, exist_ok=True)
+        torch.save(train_state, os.path.join(Path(self.conf.working_dir), f'checkpoints/state_{timestep}.cpt'))
 
     def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
         if not force and (self.conf.unit != unit or (timestep % self.conf.save_interval) if self.conf.save_interval else True):
@@ -148,7 +147,8 @@ class TorchTrainer(Trainer):
                     current_step += 1
                 if self.learner.sch:
                     self.learner.sch.step()
-                self.log.info(f"Epoch {epoch+1} finished")
+                if self.conf.unit == 'epoch':
+                    self.log.info(f"Epoch {epoch+1} finished")
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
@@ -275,7 +275,8 @@ class TorchDistributedTrainer(TorchTrainer):
                     current_step += 1
                 if self.learner.sch:
                     self.learner.sch.step()
-                self.log.info(f"Epoch {epoch+1} finished")
+                if self.conf.unit == 'epoch':
+                    self.log.info(f"Epoch {epoch+1} finished")
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 

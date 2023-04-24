@@ -12,7 +12,6 @@ init: False
 config: []
 silent: False
 output_dir: ./result
-working_dir: ${hydra.runtime.output_dir}
 
 hydra:
   job:

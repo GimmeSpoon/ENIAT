@@ -1,10 +1,11 @@
 task: none
 type: auto
 
-sub_dir: './checkpoint'
+working_dir: ${hydra.runtime.output_dir}
+
 resume: False
-resume_step: 0
-resume_dir: './result'
+resume_step:
+resume_dir:
 
 accel: False # PyTorch 2.0 compile
 num_workers: 0
