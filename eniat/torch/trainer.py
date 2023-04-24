@@ -1,7 +1,7 @@
 from typing import TypeVar, Literal, Callable
 from ..base import Trainer, Warning
 from ..data.course import Course, FullCourse
-from .learner import TorchLearner
+from .learner import TorchLearner, load_learner
 from ..utils.statelogger import StateLogger
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -40,40 +40,7 @@ def torchload(cfg:DictConfig, log:L):
         log.info('Loaded dataset.\n' + _courses.__repr__())
         
         # instantiate learner components
-
-        # Model Load
-        model = conf_instantiate(cfg.learner.model)
-        log.info("Model loaded...")
-
-        if not cfg.learner.resume:
-            log.warning("'resume' is set to False. The model will be initialized without loading a checkpoint.")
-        # loss
-        loss = instantiate(cfg.learner.loss) if cfg.learner.loss and cfg.learner.loss._target_ else None
-        if loss:
-            log.info("Loss function loaded...")
-        else:
-            log.warning("Loss function is not defined. Are you sure you wanted this?")
-        # optimizer
-        optim = instantiate(cfg.learner.optimizer, params=model.parameters()) if cfg.learner.optimizer and cfg.learner.optimizer._target_ else None
-        if optim:
-            log.info("Optimizer loaded...")
-        else:
-            log.warning("Optimizer is not defined. Are you sure you wanted this?")
-        # scheduler
-        schlr = None# instantiate(cfg.learner.scheduler, lr_lambda=lambda x: x**cfg.learner.scheduler.lr_lambda, optimizer=optim) if cfg.learner.scheduler and cfg.learner.scheduler._target_ else None
-        if schlr:
-            log.info("Scheduler loaded...")
-        else:
-            log.warning("Scheduler is not defined. Edit the configuration if this is not what you wanted.")
-        
-        # instantiate learner
-        if 'path' in cfg.learner and cfg.learner.path:
-            _mod, _bn = _dynamic_import(cfg.learner.path)
-            learner = getattr(_mod, cfg.learner.cls)(model, loss, optim, schlr, cfg.learner.resume, cfg.learner.resume_path)
-        else:
-            learner = getattr(import_module('.pytorch.learner', 'eniat'), cfg.learner.cls)(model, loss, optim, schlr, cfg.learner.resume, cfg.learner.resume_path)
-        if learner:
-            log.info("Learner instance created.")
+        learner = load_learner(cfg.learner, log)
 
         # instantiate trainer
         trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchTrainer')(course=_courses, learner=learner, conf=cfg.trainer, logger=log)
@@ -264,11 +231,9 @@ class TorchDistributedTrainer(TorchTrainer):
                     spawn(self._ddp_init, (fn.__name__, HydraConfig.get()), nprocs=self.conf.distributed.local_size, join=True)
             else:
                 if dist.get_rank() == 0:
-                    self.log.info("Custom Warning")
                     warnings.showwarning = Warning(self.log)
                     return fn(self, *args)
                 else:
-                    self.log.info("warning ignored")
                     warnings.filterwarnings("ignore")
                     with self.log.silent():
                         return fn(self, *args)
@@ -280,43 +245,12 @@ class TorchDistributedTrainer(TorchTrainer):
         self.loader = self.get_loader(task)
 
         # learner
-        cfg = self.learner_conf
-        model = conf_instantiate(cfg.model)
-        self.log.info("Model loaded...")
+        learner = load_learner(self.learner_conf, self.log)
+        model = learner.model
 
-        if not cfg.resume:
-            self.log.warning("'resume' is set to False. The model will be initialized without loading a checkpoint.")
-        # loss
-        loss = instantiate(cfg.loss) if cfg.loss and cfg.loss._target_ else None
-        if loss:
-            self.log.info("Loss function loaded...")
-        else:
-            self.log.warning("Loss function is not defined. Are you sure you wanted this?")
-        # optimizer
-        optim = instantiate(cfg.optimizer, params=model.parameters()) if cfg.optimizer and cfg.optimizer._target_ else None
-        if optim:
-            self.log.info("Optimizer loaded...")
-        else:
-            self.log.warning("Optimizer is not defined. Are you sure you wanted this?")
-        # scheduler
-        schlr = instantiate(cfg.scheduler, lr_lambda=lambda x: x**cfg.scheduler.lr_lambda, optimizer=optim) if cfg.scheduler and cfg.scheduler._target_ else None
-        if schlr:
-            self.log.info("Scheduler loaded...")
-        else:
-            self.log.warning("Scheduler is not defined. Edit the configuration if this is not what you wanted.")
-        
         if self._dist:
             model = DDP(model.to(device)).compile() if self.compile else DDP(model)
             optim = self.get_dist_opt(self.conf.distributed.optimizer, optim, model.parameters())
-        
-        # instantiate learner
-        if 'path' in cfg and cfg.path:
-            _mod, _bn = _dynamic_import(cfg.path)
-            self.learner = getattr(_mod, cfg.cls)(model, loss, optim, schlr, cfg.resume, cfg.resume_path)
-        else:
-            self.learner = getattr(import_module('.pytorch.learner', 'eniat'), cfg.cls)(model, loss, optim, schlr, cfg.resume, cfg.resume_path)
-        if self.learner:
-            self.log.info("Learner instance created.")
 
     @distributed
     def fit(self, device:int=0, global_rank:int=None, silent:bool=False, init_timestemp:int=0):

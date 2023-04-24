@@ -6,9 +6,47 @@ import torch.nn as nn
 from torch import Tensor
 from torch.nn import Module
 from torch.optim import Optimizer
+from hydra.utils import instantiate
+from ..utils.conf import conf_instantiate, _dynamic_import
+from importlib import import_module
 
 T_co = TypeVar('T_co', covariant=True)
 O = TypeVar('O', bound=Optimizer)
+
+def load_learner (conf, log):
+    # Model Load
+    model = conf_instantiate(conf.learner.model)
+    log.info("Model loaded...")
+
+    if not conf.learner.resume:
+        log.warning("'resume' is set to False. The model will be initialized without loading a checkpoint.")
+    # loss
+    loss = instantiate(conf.learner.loss) if conf.learner.loss and conf.learner.loss._target_ else None
+    if loss:
+        log.info("Loss function loaded...")
+    else:
+        log.warning("Loss function is not defined. Are you sure you wanted this?")
+    # optimizer
+    optim = instantiate(conf.learner.optimizer, params=model.parameters()) if conf.learner.optimizer and conf.learner.optimizer._target_ else None
+    if optim:
+        log.info("Optimizer loaded...")
+    else:
+        log.warning("Optimizer is not defined. Are you sure you wanted this?")
+    # scheduler
+    schlr = None# instantiate(conf.learner.scheduler, lr_lambda=lambda x: x**conf.learner.scheduler.lr_lambda, optimizer=optim) if conf.learner.scheduler and conf.learner.scheduler._target_ else None
+    if schlr:
+        log.info("Scheduler loaded...")
+    else:
+        log.warning("Scheduler is not defined. Edit the configuration if this is not what you wanted.")
+    
+    # instantiate learner
+    if 'path' in conf.learner and conf.learner.path:
+        _mod, _bn = _dynamic_import(conf.learner.path)
+        learner = getattr(_mod, conf.learner.cls)(model, loss, optim, schlr, conf.learner.resume, conf.learner.resume_path)
+    else:
+        learner = getattr(import_module('.pytorch.learner', 'eniat'), conf.learner.cls)(model, loss, optim, schlr, conf.learner.resume, conf.learner.resume_path)
+    if learner:
+        log.info("Learner instance created.")
 
 class TorchLearner(Learner, Generic[T_co]):
     def __init__(self, model:Module, criterion=None, optimizer=None, scheduler=None, resume:bool=False, resume_path:str=None) -> None:
