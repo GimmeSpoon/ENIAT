@@ -5,6 +5,8 @@ from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
 import json
 
+
+
 class DummyLogger():
     r"""This class is for debugging. You can ignore this."""
     def __init__(self, name, level, conf) -> None:
@@ -52,6 +54,7 @@ class StateLogger():
         self.console.setLevel(level)
         self.unit = conf.unit
         self.interval = conf.interval
+        self.state = []
 
     def _stepfilter(fn:Callable) -> Callable:
         def wrapper(self, data:dict, force:bool=False):
@@ -123,10 +126,13 @@ class StateLogger():
         return self.console.exception(msg, *args, **kwargs) if not self._silent else None 
 
     @_stepfilter
-    def log_state(self, data:dict):
-        log = json.dumps(data, ensure_ascii=False, indent=2)
-        if self.conf.log.file_log:
-            with open(Path(self.conf.log.dir).joinpath('state', "a")) as f:
+    def log_state(self, data:dict, json:bool=True):
+        self.state.append(data)
+        log = json.dumps(self.state, ensure_ascii=False, indent=2)
+        if json:
+            Path()
+        if self.conf.file_log:
+            with open(Path(self.conf.log.dir).joinpath('state', "a+")) as f:
                 f.write(log)
         self.console.info(log)
 
