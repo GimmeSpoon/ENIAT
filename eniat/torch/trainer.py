@@ -41,7 +41,7 @@ def torchload(cfg:DictConfig, log:L):
         learner = load_learner(cfg.learner, log)
 
         # instantiate trainer
-        trainer = getattr(import_module('.pytorch', 'eniat'), 'TorchTrainer')(course=_courses, learner=learner, conf=cfg.trainer, logger=log)
+        trainer = getattr(import_module('.torch', 'eniat'), 'TorchTrainer')(course=_courses, learner=learner, conf=cfg.trainer, logger=log)
     
     if trainer:
         log.info("Trainer instance created.")
@@ -50,13 +50,18 @@ def torchload(cfg:DictConfig, log:L):
 
 class TorchTrainer(Trainer):
     r"""PyTorch compatible trainer class.
-    Automatically manage trainign step, logging, and saving checkpoints. Takse one task, one dataset, and one learner for any run. For several tasks, you can initiate the same number of Trainers."""
+    Automatically manage training steps, logging, and saving checkpoints.
+    It only occupies one device(GPU)"""
     def __init__(self, course: C = None, learner: T = None, conf=None, grader=None, logger=None) -> None:
         super().__init__(course, learner, conf, grader, logger)
         warnings.showwarning = Warning(self.log)
+        if 'seed' in conf and conf['seed']:
+            self.rand_all(conf.seed)
+        else:
+            self.log.warning("Random seed is not set in the configuration. Randomized behaviors will not be controlled.")
 
     def rand_all(self, seed):
-        if self._dist:
+        if self.conf.distributed.type != 'none':
             torch.cuda.manual_seed_all(seed)
         else:
             torch.cuda.manual_seed(seed)
@@ -75,7 +80,7 @@ class TorchTrainer(Trainer):
         }
     
     def set_rand_state(self, state:dict) -> None:
-        if self._dist:
+        if self.conf.distributed.type != 'none':
             torch.cuda.set_rng_state_all(state['cuda'])
         else:
             torch.cuda.set_rng_state(state['cuda'])
@@ -108,7 +113,7 @@ class TorchTrainer(Trainer):
         train_state['timestep'] = timestep
         train_state['maxstep'] = self.max_step
         train_state['distributed'] = self._dist
-        Path(os.path.join(self.hc.runtime.output_dir, 'checkoints')).mkdir(parents=True, exist_ok=True)
+        Path(os.path.join(self.hc.runtime.output_dir, 'checkpoints')).mkdir(parents=True, exist_ok=True)
         torch.save(train_state, os.path.join(self.hc.runtime.output_dir, f'checkpoints/state_{timestep}.cpt'))
 
     def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
@@ -116,7 +121,7 @@ class TorchTrainer(Trainer):
             return
         self._save_model(timestep)
         self._save_train_state(timestep)
-        self.log.info(f"Checkpoint at {timestep} {unit} saved.")
+        self.log.info(f"Checkpoint at {unit} {timestep} saved.")
 
     def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
         return DataLoader(self.course.get_dataset(dataset), num_workers=self.conf.num_workers)
@@ -139,7 +144,8 @@ class TorchTrainer(Trainer):
                 for batch in (step_bar:=tqdm(loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
                     batch = self.to_tensor(batch)
                     self.learner.model.train(True)
-                    tr_loss = self.learner.fit(batch, device, self.log)
+                    pred = self.learner.model(batch[0])
+                    tr_loss = self.learner.loss_fn(pred, batch[1])
                     self.learner.opt.zero_grad()
                     tr_loss.backward()
                     self.learner.opt.step()
@@ -148,8 +154,11 @@ class TorchTrainer(Trainer):
                     self.log.log_state(step_postfix)
                     step_postfix['trainintorg_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
                     step_bar.set_postfix(step_postfix)
-                    if self.conf.unit == 'step' and current_step % self.conf.save_interval == 0:
-                        self._save_checkpoint(current_step, 'step')
+                    if self.conf.unit == 'step':
+                        if current_step % self.conf.save_interval == 0:
+                            self._save_checkpoint(current_step, 'step')
+                        if current_step % self.conf.eval_interval == 0:
+                            self.grader.compute(pred, batch[1])
                     current_step += 1
                 if self.learner.sch:
                     self.learner.sch.step()
@@ -160,7 +169,6 @@ class TorchTrainer(Trainer):
 
     def eval(self, device:int=0, silent:bool=False):
         loader = self.get_loader('eval')
-
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
     def predict(self, device:int=0, silent:bool=False):
@@ -187,11 +195,6 @@ class TorchDistributedTrainer(TorchTrainer):
     TorchDistributedTrainer is technically doing sames tasks as TorchTrainer, but it loads components after spawned processes started. Because of that, it receives only config parameters, and handles loading by itself."""
     def __init__(self, conf:DictConfig=None, learner_conf:DictConfig=None, data_conf:DictConfig=None, logger_conf:DictConfig=None, grader=None) -> None:
 
-        if not conf.distributed or conf.distributed.type == 'none':
-            self._dist = False
-        else: # distributed learning set
-            self._dist = True
-
         self.conf = conf
         self.learner_conf = learner_conf
         self.data_conf = data_conf
@@ -204,6 +207,8 @@ class TorchDistributedTrainer(TorchTrainer):
         self.compile = conf.accel
         self.init_step = conf.init_step
         self.max_step = conf.max_step
+
+        self.rand_all(self.seed)
         
     def _ddp_init(self, local_rank:int, fname:str, _hc=None) -> None:
         configure_log(_hc.job_logging, _hc.verbose)

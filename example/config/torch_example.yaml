@@ -15,6 +15,7 @@ logger:
     uri:
   tensorboard:
     enable: True
+
 data:
   fit:
     path: ./test_data.py
@@ -24,6 +25,11 @@ data:
       - ./data/numpy.npy
       - ./data/numpy2.npy
     type: npy
+
+grader:
+  methods: ['acc']
+  unit: epoch
+  interval: 1
 
 trainer:
 
@@ -37,11 +43,6 @@ trainer:
   unit: epoch
   save_interval: 1
   save_after_eval: True
-
-  metric:
-    methods: []
-    unit: epoch
-    interval: 1
 
   distributed:
      type: none

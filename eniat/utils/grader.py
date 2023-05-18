@@ -1,9 +1,13 @@
 from typing import Sequence, Union, TypeVar, Callable
 from numpy import ndarray
 import sklearn.metrics as mt
+from ..base import Learner
+from ..data import Course
 from omegaconf import DictConfig
 
 T_co = TypeVar('T_co', covariant=True)
+L = TypeVar('L', bound=Learner)
+C = TypeVar('C', bound=Course)
 
 sk_metric = {
     "acc" : mt.accuracy_score,
@@ -24,7 +28,7 @@ sk_metric = {
     "mae" : mt.mean_absolute_error,
     "mse" : mt.mean_squared_error,
     "msle" : mt.mean_squared_log_error,
-    "mdae" : mt.median_absolute_error,
+    "meae" : mt.median_absolute_error,
 }
 
 def sk_eval(preds, gt, methods:Union[str, Sequence[str]], **kwargs):
@@ -51,11 +55,15 @@ class Grader():
         def __init__(self) -> None:
             pass
     
-    def __init__(self, conf:DictConfig, methods:Union[str, Callable, Sequence[Union[str, Callable]]]) -> None:
+    def __init__(self, conf:DictConfig, methods:Union[str, Callable, Sequence[Union[str, Callable]]], logger, course:C=None, options:list[dict]=None) -> None:
+        self.conf = conf
         self.unit = conf.unit
         self.interval = conf.interval
+        self.course = course
         self.methods = []
         self.append_metric(methods)
+        self.log = logger
+        self.options = options
 
     def append_metric(self, method:Union[str, Callable, Sequence[Union[str, Callable]]]):
         if isinstance(methods, Callable):
@@ -70,11 +78,47 @@ class Grader():
                 else:
                     methods.append(sk_metric[methods])
 
-    def compute(self, prediction:T_co, ground_truth:T_co, **kwargs) -> dict:
+    def compute(self, prediction:T_co, ground_truth:T_co, options:list[dict]=None) -> dict:
         result = {}
+        if options is None:
+            options = self.options
+        opt = 0
         for method in self.methods:
-            result[method.__name__]=method(prediction, ground_truth, **kwargs)
-        return result
+            result[method.__name__] = method(prediction, ground_truth, options[opt]) if options and options[opt] else \
+            method(prediction, ground_truth)
+            opt += 1
 
-    def __call__(self, prediction:T_co, ground_truth:T_co, **kwargs):
+        self.log.log_state()
+
+        return result
+    
+    def eval(self, learner:L, device:int, data:C=None, timestep:int=None):
+        
+        self.log.info("Evaluation started...")
+
+        if not data and self.course:
+            data = self.course
+
+        if not data:
+            raise ValueError("No data is given to grader. Evaluation aborted.")
+
+        
+
+        self.log.info("Test dataset prepared.")
+
+        if self.unit == 'none' or self.interval == 0:
+
+        elif timestep and timestep % self.interval == 0:
+            t
+
+        self.log.info("Evaluation ended. The result is as below.\n" + )
+
+    def __call__(self, prediction:T_co, ground_truth:T_co, options:list[dict]):
         self.compute(prediction, ground_truth)
+
+class RemoteGrader():
+    def __init__(self) -> None:
+        pass
+
+    def run() -> None:
+        pass
