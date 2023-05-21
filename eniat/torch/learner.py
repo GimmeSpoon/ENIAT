@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Union
 from abc import abstractmethod
 from ..base import Learner
 import torch
@@ -97,6 +97,15 @@ class TorchLearner(Learner, Generic[T_co]):
             'model': self.model.state_dict(),
             'optimizer': self.op.state_dict() if self.opt else None
         }
+    
+    def to(self, device:Union[int, str]):
+        self.model.to(device)
+
+    def train(self):
+        self.model.train()
+
+    def eval(self):
+        self.model.eval()
 
 class SupremeLearner (TorchLearner):
     def __init__(self, model: Module, criterion=None, optimizer=None, scheduler=None, resume: bool = False, resume_path: str = None) -> None:
@@ -112,5 +121,5 @@ class SupremeLearner (TorchLearner):
     def predict(self, batch: Tensor, device: int, logger):
         batch = batch.to(device)
         model = self.model.to(device)
-        pred = model(x)
+        pred = model(batch)
         return pred

@@ -1,11 +1,13 @@
 from typing import TypeVar, Union, Literal, Sequence
 from ..base import Grader, Learner
 from ..data import Course
+from . import TorchPredictor
 
 C = TypeVar('C', bound=Course)
 L = TypeVar('L', bound=Learner)
 
-class TorchGrader (Grader):
+class TorchGrader (Grader, TorchPredictor):
+
     def eval(
             self,
             learner:L,
@@ -51,6 +53,6 @@ class TorchGrader (Grader):
             # Distributed Evaluation
             
         else:
-            s
+            learner.to(device)
 
         self.log.info("Evaluation ended. The result is as below.\n" + )

@@ -144,16 +144,6 @@ class TorchTrainer(Trainer):
     def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
         return DataLoader(self.course.get_dataset(dataset), num_workers=self.conf.num_workers)
 
-    @staticmethod
-    def to_tensor(batch):
-        if isinstance(batch, list):
-            for data in batch:
-                if isinstance(data, np.ndarray):
-                    data = torch.from_numpy(data)
-        elif isinstance(batch, np.ndarray):
-            batch = torch.from_numpy(data)
-        return batch
-
     def fit(self, device:int=0, silent:bool=False, eval:bool=False):
         loader = self.get_loader('fit')
         current_step = 0
@@ -200,7 +190,7 @@ class TorchTrainer(Trainer):
     def predict(self, device:int=0, silent:bool=False):
         loader = self.get_loader('predict')
         current_step = 0
-        for batch in (step_bar:=tqdm(loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
+        for batch in (step_bar:=tqdm(loader, desc='Steps', unit='step', position=2, leave=False, disable=silent)):
             batch = self.to_tensor(batch)
             tr_loss = self.learner.fit(batch, device, self.log)
             self.learner.opt.zero_grad()
