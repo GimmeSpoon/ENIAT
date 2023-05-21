@@ -3,11 +3,12 @@ from ..base import Trainer, Warning
 from ..data.course import Course, FullCourse
 from .learner import TorchLearner, load_learner
 from ..utils.statelogger import StateLogger
+from ..base.grader import Grader
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 import torch
 import torch.distributed as dist
-from torch.utils.data import Dataset, DataLoader, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler
 from torch.multiprocessing import spawn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.optim import PostLocalSGDOptimizer, ZeroRedundancyOptimizer
@@ -41,8 +42,10 @@ def torchload(cfg:DictConfig, log:L):
         learner = load_learner(cfg.learner, log)
 
         # instantiate trainer
-        trainer = getattr(import_module('.torch', 'eniat'), 'TorchTrainer')(course=_courses, learner=learner, conf=cfg.trainer, logger=log)
+        trainer = TorchTrainer(course=_courses, learner=learner, conf=cfg.trainer, logger=log)
     
+        grader = Grader(cfg.grader)
+
     if trainer:
         log.info("Trainer instance created.")
     
@@ -55,10 +58,21 @@ class TorchTrainer(Trainer):
     def __init__(self, course: C = None, learner: T = None, conf=None, grader=None, logger=None) -> None:
         super().__init__(course, learner, conf, grader, logger)
         warnings.showwarning = Warning(self.log)
+
+        self.seed = conf.seed
+        self.batch_size = conf.batch_size
+        self.init_step = 0
+        self.max_step = conf.max_step
+        self.unit = conf.unit
+        self.interval = conf.save_interval
+        self.save_after_eval = conf.save_after_eval
+        
         if 'seed' in conf and conf['seed']:
             self.rand_all(conf.seed)
         else:
-            self.log.warning("Random seed is not set in the configuration. Randomized behaviors will not be controlled.")
+            self.log.warning("Random seed is not set in the configuration. If there's no resumed state, random behaviors can not be controlled.")
+            self.seed = random.random()
+            self.rand_all(self.seed)
 
     def rand_all(self, seed):
         if self.conf.distributed.type != 'none':
@@ -90,12 +104,15 @@ class TorchTrainer(Trainer):
         np.random.set_state(state['numpy'])
         random.setstate(state['random'])
 
-    def resume_training_state(self, path:str) -> None:
+    def load_state(self, path:str) -> None:
         resumed = torch.load(path)
+        self.learner.load_optimizer(resumed['optimizer'])
         self.unit = resumed['unit']
         self.set_rand_state(resumed['rng_state'])
         self.init_step = resumed['timestep']
+        self.batch_size = resumed['batch_size']
         self.max_step = resumed['maxstep']
+        self.conf.distributed = resumed['distributed']
 
     def _save_model(self, timestep:int=None) -> None:
         if not self.hc:
@@ -103,7 +120,7 @@ class TorchTrainer(Trainer):
         Path(os.path.join(self.hc.runtime.output_dir, 'checkpoints')).mkdir(parents=True, exist_ok=True)
         torch.save(self.learner.model.state_dict(), os.path.join( self.hc.runtime.output_dir , f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
 
-    def _save_train_state(self, timestep:int) -> None:
+    def _save_state(self, timestep:int, filename:str=None) -> None:
         if not self.hc:
             self.hc = HydraConfig.get()
         train_state = {}
@@ -111,16 +128,17 @@ class TorchTrainer(Trainer):
         train_state['unit'] = self.unit
         train_state['rng_state'] = self.get_rand_state()
         train_state['timestep'] = timestep
+        train_state['batch_size'] = self.batch_size
         train_state['maxstep'] = self.max_step
-        train_state['distributed'] = self._dist
+        train_state['distributed'] = self.conf.distributed
         Path(os.path.join(self.hc.runtime.output_dir, 'checkpoints')).mkdir(parents=True, exist_ok=True)
-        torch.save(train_state, os.path.join(self.hc.runtime.output_dir, f'checkpoints/state_{timestep}.cpt'))
+        torch.save(train_state, os.path.join(self.hc.runtime.output_dir, f'checkpoints/state_{timestep}.cpt' if filename is None else filename))
 
     def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
         if not force and (self.conf.unit != unit or (timestep % self.conf.save_interval) if self.conf.save_interval else True):
             return
         self._save_model(timestep)
-        self._save_train_state(timestep)
+        self._save_state(timestep)
         self.log.info(f"Checkpoint at {unit} {timestep} saved.")
 
     def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
@@ -136,12 +154,13 @@ class TorchTrainer(Trainer):
             batch = torch.from_numpy(data)
         return batch
 
-    def fit(self, device:int=0, silent:bool=False):
+    def fit(self, device:int=0, silent:bool=False, eval:bool=False):
         loader = self.get_loader('fit')
         current_step = 0
         with logging_redirect_tqdm():
             for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
                 for batch in (step_bar:=tqdm(loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
+
                     batch = self.to_tensor(batch)
                     self.learner.model.train(True)
                     pred = self.learner.model(batch[0])
@@ -150,16 +169,23 @@ class TorchTrainer(Trainer):
                     tr_loss.backward()
                     self.learner.opt.step()
                     self.learner.model.train(False)
+
                     step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step+1}
                     self.log.log_state(step_postfix)
                     step_postfix['trainintorg_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
                     step_bar.set_postfix(step_postfix)
+
                     if self.conf.unit == 'step':
                         if current_step % self.conf.save_interval == 0:
                             self._save_checkpoint(current_step, 'step')
-                        if current_step % self.conf.eval_interval == 0:
-                            self.grader.compute(pred, batch[1])
+
+                    if self.grader and self.grader.is_active_step(current_step, 'step'):
+                        self._save_state(current_step, 'temp.cpt')
+                        self.grader.eval()
+                        self._
+
                     current_step += 1
+
                 if self.learner.sch:
                     self.learner.sch.step()
                 if self.conf.unit == 'epoch':
@@ -232,15 +258,20 @@ class TorchDistributedTrainer(TorchTrainer):
     def distributed (fn:Callable) -> Callable:
         def wrapper(self, *args):
             if not dist.is_initialized():
+
                 if self.conf.distributed.debug:
                     os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
                     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
+
                 warnings.showwarning = Warning(self.log)
+
                 if dist.is_torchelastic_launched():
+                    #torchrun
                     self.hc = HydraConfig.get()
                     self._torchrun_init(self)
                     return fn(int(os.environ['LOCAL_RANK']), int(os.environ['RANK']))
                 else:
+                    #DDP
                     spawn(self._ddp_init, (fn.__name__, HydraConfig.get()), nprocs=self.conf.distributed.local_size, join=True)
             else:
                 if dist.get_rank() == 0:
@@ -266,7 +297,7 @@ class TorchDistributedTrainer(TorchTrainer):
             optim = self.get_dist_opt(self.conf.distributed.optimizer, self.learner.opt, model.parameters())
 
     @distributed
-    def fit(self, device:int=0, global_rank:int=0, silent:bool=False):
+    def fit(self, device:int=0, global_rank:int=0, silent:bool=False, eval:bool=False):
         silent = True if device != 0 else silent
         self.prepare(device, 'fit')
         current_step = 0
