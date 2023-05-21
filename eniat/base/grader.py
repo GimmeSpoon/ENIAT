@@ -1,7 +1,7 @@
-from typing import Sequence, Union, TypeVar, Callable
+from typing import Sequence, Union, TypeVar, Callable, Literal
 from numpy import ndarray
 import sklearn.metrics as mt
-from ..base import Learner
+from . import Learner
 from ..data import Course
 from omegaconf import DictConfig
 
@@ -57,6 +57,8 @@ class Grader():
     
     def __init__(self, conf:DictConfig, methods:Union[str, Callable, Sequence[Union[str, Callable]]], logger, course:C=None, options:list[dict]=None) -> None:
         self.conf = conf
+        if conf.methods:
+            self.append_metric(conf.methods)
         self.unit = conf.unit
         self.interval = conf.interval
         self.course = course
@@ -92,31 +94,11 @@ class Grader():
 
         return result
     
-    def eval(self, learner:L, device:int, data:C=None, timestep:int=None):
-        
-        self.log.info("Evaluation started...")
-
-        if not data and self.course:
-            data = self.course
-
-        if not data:
-            raise ValueError("No data is given to grader. Evaluation aborted.")
-
-        
-
-        self.log.info("Test dataset prepared.")
-
-        if self.unit == 'none' or self.interval == 0:
-
-        elif timestep and timestep % self.interval == 0:
-            t
-
-        self.log.info("Evaluation ended. The result is as below.\n" + )
-
     def __call__(self, prediction:T_co, ground_truth:T_co, options:list[dict]):
         self.compute(prediction, ground_truth)
 
 class RemoteGrader():
+    '''Spawn a separated evalaution process'''
     def __init__(self) -> None:
         pass
 

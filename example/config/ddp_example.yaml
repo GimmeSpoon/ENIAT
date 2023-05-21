@@ -4,17 +4,19 @@ defaults:
 
 resume_dir: '/home/user/training_state/221225/'
 keep_origin_path: False
+task: fit_n_eval
 
 logger:
   type: StateLogger
   level: 10
-  unit: epoch
-  interval: 1
+  json: False
+  xls: False
   mlflow:
     enable: True
     uri:
   tensorboard:
     enable: True
+
 data:
   fit:
     path: ./test_data.py
@@ -27,19 +29,22 @@ data:
 
 grader:
   methods: ['acc']
-
-  label: []
-  batch_size: 0
-
+  seed: 666
+  batch_size: 100
   unit: epoch
-  log_interval: 1
+  eval_interval: 1
+  remote:
+    enable: False
+  distributed:
+    type: DDP
+    debug: False
+    local_size: 2
+    world_size: 2
+    master_address: 'localhost'
+    master_port: '12346'
+    backend: gloo
 
 trainer:
-
-  task: train
-  type: torch
-  label: []
-
   seed: 666
   batch_size: 1000
   max_step: 100
@@ -55,8 +60,6 @@ trainer:
      master_address: 'localhost'
      master_port: '12345'
      backend: gloo
-     env_set:
-     env_copy:
 
 learner:
   cls: SupremeLearner

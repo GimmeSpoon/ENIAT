@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import TypeVar
 from ..data.course import Course, FullCourse
 from tqdm.auto import tqdm
-from ..utils.grader import Grader
+from .grader import Grader
 import sys
 import warnings
 
@@ -54,10 +54,10 @@ class Trainer:
         self.course = course
         self.learner = learner
         self.conf = conf
-        self.log = logger
         self.grader = grader
+        self.log = logger
 
-    def fit(self, silent:bool=False):
+    def fit(self, silent:bool=False, eval:bool=False):
         self.course.select('train')
         for epoch in (epoch_bar:=tqdm( [1] if not self.conf.epoch else self.conf.epoch, desc='Training', unit='epoch', position=0, leave=False, disable=silent)):
             self.learner.fit(batch=self.course.next())

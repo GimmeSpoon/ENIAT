@@ -8,8 +8,6 @@ keep_origin_path: False
 logger:
   type: StateLogger
   level: 10
-  unit: epoch
-  interval: 1
   mlflow:
     enable: True
     uri:
@@ -30,9 +28,9 @@ grader:
   methods: ['acc']
   unit: epoch
   interval: 1
+  device: 0
 
 trainer:
-
   task: train
   type: torch
   label: []

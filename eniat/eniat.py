@@ -13,6 +13,56 @@ from .data.course import FullCourse, Course, get_course_instance
 version_base = None
 eniat_path = os.path.abspath(pkg_resources.resource_filename(__name__, 'config'))
 
+class Manager():
+    def __init__(self, cfg: DictConfig, silent:bool = False) -> None:
+        self.cfg = cfg
+        self.type = cfg.type
+        self.task = cfg.task
+
+        self.log = getattr(import_module('.utils.statelogger', 'eniat'), cfg.logger.type)(__name__, cfg.logger.level, conf=cfg.logger)
+
+        if not silent:
+            introduce()
+
+        self.log.info("Experiment Config:\n"+OmegaConf.to_yaml(cfg))
+
+    def run(self) -> None:
+        try:
+            if self.cfg.type == "torch":
+                self.log.info(f"Initiating an experiment based on PyTorch.")
+
+                if self.cfg.trainer.distributed.type == "none" or self.cfg.trainer.distributed.type == "DP":
+                    _courses = get_course_instance(self.cfg.data, self.log)
+                    self.log.info('Loaded dataset.\n' + _courses.__repr__())
+                    learner, trainer = torchload(self.cfg, self.log)
+                else:
+                    trainer = getattr(import_module('.torch', 'eniat'), 'TorchDistributedTrainer')(conf=self.cfg.trainer, data_conf=self.cfg.data, learner_conf=self.cfg.learner, logger_conf=self.cfg.logger)
+                    self.log.info("Distributed Learning (Torch) is configured.")
+
+            if self.cfg.type == "scikit":
+
+                self.log.info(f"Initiating an experiment based on Scikit-learn.")
+                model = instantiate(self.cfg.learner.model)
+
+                learner = scikit_load(self.cfg.learner, self.cfg.trainer)
+
+            if self.cfg.trainer.task == "fit" or self.cfg.trainer.task == "train":
+                trainer.fit()
+            if self.cfg.trainer.task == "fit_n_eval" or self.cfg.trainer.task == "train_n_test":
+                trainer.fit(eval=True)
+            elif self.cfg.trainer.task == "eval" or self.cfg.trainer.task == "test":
+                trainer.eval()
+            elif self.cfg.trainer.task == "predict" or self.cfg.trainer.task == "infer":
+                trainer.predict()
+            else:
+                raise ValueError("<task> of trainer config must be one of the following literals : ['fit', 'train', 'eval', 'test', 'predict', 'infer', 'fit_n_eval', 'train_n_test']")
+
+        except BaseException as err:
+            self.log.exception(err)
+            print("If you need some help, type command : 'eniat do=help'")
+
+
+
 @hydra.main(version_base=version_base, config_path=eniat_path, config_name='eniat')
 def eniat(cfg: DictConfig) -> None:
 
@@ -21,6 +71,8 @@ def eniat(cfg: DictConfig) -> None:
     if cfg.init:
         copytree(eniat_path, './config', ignore=ignore_patterns('*.yaml'))
         print("Config files copied to current directory.")
+    
+    manager = Manager(cfg, cfg.silent)
 
     log = getattr(import_module('.utils.statelogger', 'eniat'), cfg.logger.type)(__name__, cfg.logger.level, conf=cfg.logger)
 
