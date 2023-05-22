@@ -151,9 +151,31 @@ class TorchTrainer(Trainer, TorchPredictor):
         self.prepare(device, 'fit', self.conf.accel, self.learner_conf, self.data_conf, self.log, self.conf.env.optimizer)
 
         current_step = 0
+
+        if self.conf.resume:
+            if not isinstance(self.conf.resume_step, int):
+                raise ValueError("Tried to resume training state, but 'resume_step' is not valid.")
+
+            if not isinstance(self.conf.resume_dir, str) or not os.path.exists(self.conf.resume_dir):
+                raise ValueError("Tried to resume training state, but 'resume_step' is not valid.")
+
+            model_path = os.path.join(self.conf.resume_dir, f'model_{self.conf.resume_step}.cpt')
+            state_path = os.path.join(self.conf.resume_dir, f'state_{self.conf.resume_step}.cpt')
+
+            self.learner.load_model(path=model_path)
+
+            checkpoint = torch.load(state_path)
+            self.learner.load_optimizer(state=checkpoint['optimizer'])
+            self.set_rand_state(checkpoint['rng_state'])
+            self.conf.init_step = checkpoint['timestep']
+            self.conf.unit = checkpoint['unit']
+
+            if self.conf.unit == 'step':
+                current_step = self.conf.init_step
+
         with logging_redirect_tqdm():
             for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
-                for batch in (step_bar:=tqdm(self.loader, desc='Steps', unit='step', position=1, leave=False, disable=silent)):
+                for batch in (step_bar:=tqdm(self.loader if self.conf.unit == 'epoch' else range(self.conf.init_step, self.conf.max_step), desc='Steps', unit='step', position=1, leave=False, disable=silent)):
 
                     batch = to_tensor(batch)
                     self.learner.model.train(True)
@@ -169,16 +191,19 @@ class TorchTrainer(Trainer, TorchPredictor):
                     step_postfix['training_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
                     step_bar.set_postfix(step_postfix)
 
+                    current_step += 1
+
                     if self.conf.unit == 'step':
                         if current_step % self.conf.save_interval == 0:
                             self._save_checkpoint(current_step, 'step')
 
-                    current_step += 1
-
                 if self.learner.sch:
                     self.learner.sch.step()
+
                 if self.conf.unit == 'epoch':
                     self.log.info(f"Epoch {epoch+1} finished")
+                    if current_step % self.conf.save_interval == 0:
+                            self._save_checkpoint(epoch+1, 'epoch')
 
         self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
