@@ -4,6 +4,7 @@ defaults:
 
 resume_dir: '/home/user/training_state/221225/'
 keep_origin_path: False
+
 task: fit_n_eval
 
 logger:
@@ -51,12 +52,14 @@ trainer:
   unit: epoch
   save_interval: 1
   save_after_eval: True
+  accel: True
 
-  distributed:
+  env:
      type: DDP
      debug: False
      local_size: 2
      world_size: 2
+     global_rank: 0
      master_address: 'localhost'
      master_port: '12345'
      backend: gloo

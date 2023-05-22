@@ -30,13 +30,13 @@ class Manager():
         try:
             if self.cfg.type == "torch":
                 self.log.info(f"Initiating an experiment based on PyTorch.")
-
+                trainer = getattr(import_module('.torch', 'eniat'), 'TorchDistributedTrainer')(conf=self.cfg.trainer, data_conf=self.cfg.data, learner_conf=self.cfg.learner, logger_conf=self.cfg.logger)
                 if self.cfg.trainer.distributed.type == "none" or self.cfg.trainer.distributed.type == "DP":
                     _courses = get_course_instance(self.cfg.data, self.log)
                     self.log.info('Loaded dataset.\n' + _courses.__repr__())
                     learner, trainer = torchload(self.cfg, self.log)
                 else:
-                    trainer = getattr(import_module('.torch', 'eniat'), 'TorchDistributedTrainer')(conf=self.cfg.trainer, data_conf=self.cfg.data, learner_conf=self.cfg.learner, logger_conf=self.cfg.logger)
+                    
                     self.log.info("Distributed Learning (Torch) is configured.")
 
             if self.cfg.type == "scikit":
@@ -46,13 +46,13 @@ class Manager():
 
                 learner = scikit_load(self.cfg.learner, self.cfg.trainer)
 
-            if self.cfg.trainer.task == "fit" or self.cfg.trainer.task == "train":
+            if self.cfg.task == "fit" or self.cfg.task == "train":
                 trainer.fit()
-            if self.cfg.trainer.task == "fit_n_eval" or self.cfg.trainer.task == "train_n_test":
+            if self.cfg.task == "fit_n_eval" or self.cfg.task == "train_n_test":
                 trainer.fit(eval=True)
-            elif self.cfg.trainer.task == "eval" or self.cfg.trainer.task == "test":
+            elif self.cfg.task == "eval" or self.cfg.task == "test":
                 trainer.eval()
-            elif self.cfg.trainer.task == "predict" or self.cfg.trainer.task == "infer":
+            elif self.cfg.task == "predict" or self.cfg.task == "infer":
                 trainer.predict()
             else:
                 raise ValueError("<task> of trainer config must be one of the following literals : ['fit', 'train', 'eval', 'test', 'predict', 'infer', 'fit_n_eval', 'train_n_test']")
@@ -72,7 +72,7 @@ def eniat(cfg: DictConfig) -> None:
         copytree(eniat_path, './config', ignore=ignore_patterns('*.yaml'))
         print("Config files copied to current directory.")
     
-    manager = Manager(cfg, cfg.silent)
+    #manager = Manager(cfg, cfg.silent)
 
     log = getattr(import_module('.utils.statelogger', 'eniat'), cfg.logger.type)(__name__, cfg.logger.level, conf=cfg.logger)
 
@@ -81,29 +81,23 @@ def eniat(cfg: DictConfig) -> None:
 
     try:
         # Torch
-        if cfg.trainer.type == "torch":
+        if cfg.type == "torch":
 
-            log.info(f"Initiating an experiment based on PyTorch.")
+            trainer = torchload(cfg, log)
 
-            if cfg.trainer.distributed.type == "none" or cfg.trainer.distributed.type == "DP":
-                _courses = get_course_instance(cfg.data, log)
-                log.info('Loaded dataset.\n' + _courses.__repr__())
-                learner, trainer = torchload(cfg, log)
-            else:
-                trainer = getattr(import_module('.torch', 'eniat'), 'TorchDistributedTrainer')(conf=cfg.trainer, data_conf=cfg.data, learner_conf=cfg.learner, logger_conf=cfg.logger)
-                log.info("Distributed Learning (Torch) is configured.")
-
-            if cfg.trainer.task == "fit" or cfg.trainer.task == "train":
+            if cfg.task == "fit" or cfg.task == "train":
                 trainer.fit()
-            elif cfg.trainer.task == "eval" or cfg.trainer.task == "test":
+            elif cfg.task == "fit_n_eval" or cfg.task == "train_n_test":
+                trainer.fit()
+            elif cfg.task == "eval" or cfg.task == "test":
                 trainer.eval()
-            elif cfg.trainer.task == "predict" or cfg.trainer.task == "infer":
+            elif cfg.task == "predict" or cfg.task == "infer":
                 trainer.predict()
             else:
                 raise ValueError("<task> of trainer config must be one of the following literals : ['fit', 'train', 'eval', 'test', 'predict', 'infer']")
 
         # Scikit-learn
-        if cfg.trainer.type == "scikit":
+        if cfg.type == "scikit":
 
             log.info(f"Initiating an experiment based on Scikit-learn.")
             model = instantiate(cfg.learner.model)

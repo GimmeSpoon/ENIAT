@@ -2,4 +2,3 @@ enable: True
 unit: ${trainer.unit}
 interval: ${trainer.save_interval}
 methods: []
-options: []

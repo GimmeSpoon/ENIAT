@@ -1,7 +1,7 @@
 from typing import TypeVar, Union, Literal, Sequence
 from ..base import Grader, Learner
 from ..data import Course
-from . import TorchPredictor
+from .base import TorchPredictor
 
 C = TypeVar('C', bound=Course)
 L = TypeVar('L', bound=Learner)
@@ -15,7 +15,8 @@ class TorchGrader (Grader, TorchPredictor):
             data:C=None,
             timestep:int=None,
             unit:Literal['epoch', 'step']=None,
-            step_check:bool=False
+            step_check:bool=False,
+            position:int = 0
             ):
             
         if step_check:
@@ -51,8 +52,8 @@ class TorchGrader (Grader, TorchPredictor):
 
         if self.conf.distributed.enable:
             # Distributed Evaluation
-            
+            res = self.predict()
         else:
             learner.to(device)
 
-        self.log.info("Evaluation ended. The result is as below.\n" + )
+        self.log.info("Evaluation ended. The result is as below.\n")

@@ -5,6 +5,9 @@ defaults:
 resume_dir: '/home/user/training_state/221225/'
 keep_origin_path: False
 
+task: fit_n_eval
+type: torch
+
 logger:
   type: StateLogger
   level: 10
@@ -31,10 +34,6 @@ grader:
   device: 0
 
 trainer:
-  task: train
-  type: torch
-  label: []
-
   seed: 666
   batch_size: 1000
   max_step: 100
@@ -42,8 +41,9 @@ trainer:
   save_interval: 1
   save_after_eval: True
 
-  distributed:
-     type: none
+  env:
+     type: single
+     dev_id: 0
 
 learner:
   cls: SupremeLearner

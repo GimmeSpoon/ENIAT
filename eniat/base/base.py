@@ -2,7 +2,6 @@ from abc import ABCMeta, abstractmethod
 from typing import TypeVar
 from ..data.course import Course, FullCourse
 from tqdm.auto import tqdm
-from .grader import Grader
 import sys
 import warnings
 

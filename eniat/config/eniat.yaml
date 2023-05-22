@@ -13,11 +13,14 @@ config: []
 silent: False
 output_dir: ./result
 
+task:
+type:
+
 hydra:
   job:
     name: eniat
   run:
-    dir: ${output_dir}/${now:%Y_%m_%d}/${now:%H_%M_%S}_${learner.name}_${trainer.task}_${hydra.job.override_dirname}
+    dir: ${output_dir}/${now:%Y_%m_%d}/${now:%H_%M_%S}_${learner.name}_${task}_${hydra.job.override_dirname}
   sweep:
     dir: ${output_dir}/${now:%Y-%m-%d}
     subdir: ${now:%H-%M-%S}_${learner.name}_${trainer.task}_${hydra.job.override_dirname}

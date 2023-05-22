@@ -1,12 +1,15 @@
 from .learner import TorchLearner, SupremeLearner
-from .trainer import TorchTrainer, TorchDistributedTrainer, torchload
+from .trainer import TorchTrainer, torchload, distributed
 from .grader import TorchGrader
-from .base import TorchPredictor
+from .base import TorchPredictor, to_tensor
 
 __all__ = [
     'torchload',
     'TorchLearner',
     'SupremeLearner',
     'TorchTrainer',
-    'TorchDistributedTrainer',
+    'distributed',
+    'TorchGrader',
+    'TorchPredictor',
+    'to_tensor',
 ]

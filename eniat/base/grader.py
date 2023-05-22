@@ -55,30 +55,31 @@ class Grader():
         def __init__(self) -> None:
             pass
     
-    def __init__(self, conf:DictConfig, methods:Union[str, Callable, Sequence[Union[str, Callable]]], logger, course:C=None, options:list[dict]=None) -> None:
+    def __init__(self, conf:DictConfig, methods:Union[str, Callable, Sequence[Union[str, Callable]]]=None, logger=None, course:C=None, options:list[dict]=None) -> None:
         self.conf = conf
         if conf.methods:
             self.append_metric(conf.methods)
         self.unit = conf.unit
         self.interval = conf.interval
         self.course = course
-        self.methods = []
         self.append_metric(methods)
         self.log = logger
         self.options = options
 
-    def append_metric(self, method:Union[str, Callable, Sequence[Union[str, Callable]]]):
+    def append_metric(self, methods:Union[str, Callable, Sequence[Union[str, Callable]]]):
         if isinstance(methods, Callable):
-            methods = [methods]
+            self.methods = [methods]
         elif isinstance(methods, str):
-            methods = [sk_metric[methods]]
-        else:
-            methods = []
+            self.methods = [sk_metric[methods]]
+        elif methods is not None:
+            self.methods = []
             for method in methods:
-                if isinstance(methods, Callable):
-                    methods.append(method)
+                if isinstance(method, Callable):
+                    self.methods.append(method)
                 else:
-                    methods.append(sk_metric[methods])
+                    self.methods.append(sk_metric[method])
+        else:
+            self.methods = []
 
     def compute(self, prediction:T_co, ground_truth:T_co, options:list[dict]=None) -> dict:
         result = {}
@@ -90,7 +91,8 @@ class Grader():
             method(prediction, ground_truth)
             opt += 1
 
-        self.log.log_state()
+        if self.log:
+            self.log.log_state()
 
         return result
     
