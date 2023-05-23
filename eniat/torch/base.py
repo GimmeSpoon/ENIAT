@@ -52,9 +52,6 @@ def distributed (fn:Callable) -> Callable:
                 #DDP
                 spawn(self._ddp_init, (fn.__name__, HydraConfig.get(), silent, position), nprocs=self.conf.env.local_size, join=True)
         else:
-
-            print(f"torchrun entrypoint test\ntorchelastic_launched: {dist.is_torchelastic_launched()}") #debug for torchrun. delete this line after test
-                
             if dist.get_rank() == 0:
                 warnings.showwarning = Warning(self.log)
                 return fn(self, device, global_rank, silent, position)
@@ -72,15 +69,15 @@ class TorchPredictor():
         raise NotImplementedError
 
     def _ddp_init(self, local_rank:int, fname:str, _hc=None, silent:bool=False, position:int=0) -> None:
-        print("ddp entrypoint")
         configure_log(_hc.job_logging, _hc.verbose)
         self.hc = _hc
-        self.log.info("setting DDP environment...")
         os.environ["LOCAL_RANK"] = str(local_rank)
         os.environ["MASTER_ADDR"] = self.conf.env.master_address
         os.environ["MASTER_PORT"] = self.conf.env.master_port
         rank = self.conf.env.global_rank + local_rank
         dist.init_process_group(backend=self.conf.env.backend, init_method=self.conf.env.init_method, world_size=self.conf.env.world_size, rank=rank)
+        if not local_rank:
+            self.log.info("configured DDP environment...")
         return getattr(self, fname)(local_rank, rank, silent, position)
 
     def _torchrun_init(self):
