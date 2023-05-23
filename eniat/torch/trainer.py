@@ -163,7 +163,7 @@ class TorchTrainer(Trainer, TorchPredictor):
                 raise ValueError("Tried to resume training state, but 'resume_step' is not valid.")
 
             if not os.path.exists(os.path.abspath(self.conf.resume_dir)):
-                raise ValueError(f"Tried to resume training state, but resume_dir[:{self.conf.resume.dir}] is not valid.")
+                raise ValueError(f"Tried to resume training state, but resume_dir[:{self.conf.resume_dir}] is not valid.")
 
             model_path = os.path.join(self.conf.resume_dir, f'model_{self.conf.resume_step}.cpt')
             state_path = os.path.join(self.conf.resume_dir, f'state_{self.conf.resume_step}.cpt')
