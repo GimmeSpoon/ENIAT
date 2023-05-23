@@ -60,6 +60,8 @@ class TorchTrainer(Trainer, TorchPredictor):
         self.max_step = conf.max_step
         self.batch_size = conf.batch_size
 
+        self.hc = HydraConfig.get()
+
         if 'seed' in conf and conf['seed']:
             self.rand_all(conf.seed)
         else:
@@ -111,10 +113,14 @@ class TorchTrainer(Trainer, TorchPredictor):
         self.log.info("Random state loaded.")
 
     def _save_model(self, timestep:int=None) -> None:
-        Path(os.path.join(self.conf.working_dir, 'checkpoints')).mkdir(parents=True, exist_ok=True)
-        torch.save(self.learner.model.state_dict(), os.path.join( self.conf.working_dir , f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
+        if not self.hc:
+            self.hc = HydraConfig.get()
+        Path(os.path.join(self.hc.runtime.output_dir, 'checkpoints')).mkdir(parents=True, exist_ok=True)
+        torch.save(self.learner.model.state_dict(), os.path.join( self.hc.runtime.output_dir , f'checkpoints/model_{timestep}.cpt' if timestep else 'checkpoints/model.cpt'))
 
     def _save_state(self, timestep:int, filename:str=None) -> None:
+        if not self.hc:
+            self.hc = HydraConfig.get()
         train_state = {}
         train_state['optimizer'] = self.learner.opt.state_dict()
         train_state['unit'] = self.unit
@@ -123,8 +129,8 @@ class TorchTrainer(Trainer, TorchPredictor):
         train_state['batch_size'] = self.batch_size
         train_state['maxstep'] = self.max_step
         train_state['env'] = self.conf.env
-        Path(os.path.join(self.conf.working_dir, 'checkpoints')).mkdir(parents=True, exist_ok=True)
-        torch.save(train_state, os.path.join(self.conf.working_dir, f'checkpoints/state_{timestep}.cpt' if filename is None else filename))
+        Path(os.path.join(self.hc.runtime.output_dir, 'checkpoints')).mkdir(parents=True, exist_ok=True)
+        torch.save(train_state, os.path.join(self.hc.runtime.output_dir, f'checkpoints/state_{timestep}.cpt' if filename is None else filename))
 
     def _save_checkpoint(self, timestep:int, unit:Literal['epoch', 'step'], force:bool=False) -> None:
         if not force and (self.conf.unit != unit or (timestep % self.conf.save_interval) if self.conf.save_interval else True):
