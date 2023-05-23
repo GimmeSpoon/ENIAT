@@ -201,7 +201,7 @@ class TorchTrainer(Trainer, TorchPredictor):
                     if self.conf.unit == 'step':
                         if current_step % self.conf.save_interval == 0:
                             if dist.is_initialized():
-                                self.learner.opt.consolidate_state_dict()
+                                self.learner.opt.consolidate_state_dict(device)
                             if not dist.is_initialized() or dist.get_rank() == 0:
                                 self._save_checkpoint(current_step, 'step')
 
@@ -212,7 +212,7 @@ class TorchTrainer(Trainer, TorchPredictor):
                     self.log.info(f"Epoch {epoch+1} finished")
                     if current_step % self.conf.save_interval == 0:
                         if dist.is_initialized():
-                                self.learner.opt.consolidate_state_dict()
+                                self.learner.opt.consolidate_state_dict(device)
                         if not dist.is_initialized() or dist.get_rank() == 0:
                             self._save_checkpoint(epoch+1, 'epoch')
 
