@@ -16,6 +16,7 @@ import numpy as np
 from omegaconf import DictConfig
 from hydra.core.hydra_config import HydraConfig
 from pathlib import Path
+import warnings
 
 T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
@@ -61,6 +62,8 @@ class TorchTrainer(Trainer, TorchPredictor):
         self.batch_size = conf.batch_size
 
         self.hc = HydraConfig.get()
+
+        warnings.showwarning = lambda *args: self.log.warning(args[0])
 
         if 'seed' in conf and conf['seed']:
             self.rand_all(conf.seed)

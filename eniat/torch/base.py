@@ -41,8 +41,6 @@ def distributed (fn:Callable) -> Callable:
                 os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
                 os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
 
-            warnings.showwarning = Warning(self.log)
-
             if dist.is_torchelastic_launched():
                 #torchrun
                 self.hc = HydraConfig.get()
@@ -53,7 +51,6 @@ def distributed (fn:Callable) -> Callable:
                 spawn(self._ddp_init, (fn.__name__, HydraConfig.get(), silent, position), nprocs=self.conf.env.local_size, join=True)
         else:
             if dist.get_rank() == 0:
-                warnings.showwarning = Warning(self.log)
                 return fn(self, device, global_rank, silent, position)
             else:
                 warnings.filterwarnings("ignore")
