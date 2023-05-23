@@ -170,7 +170,7 @@ class TorchTrainer(Trainer, TorchPredictor):
 
             self.learner.load_model(path=model_path)
 
-            checkpoint = torch.load(state_path, map_location=device)
+            checkpoint = torch.load(state_path, map_location=torch.device(device))
             self.learner.load_optimizer(state=checkpoint['optimizer'])
             self.set_rand_state(checkpoint['rng_state'])
             self.conf.init_step = checkpoint['timestep']
