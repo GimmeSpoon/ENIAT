@@ -53,7 +53,7 @@ def distributed (fn:Callable) -> Callable:
             if dist.get_rank() == 0:
                 return fn(self, device, global_rank, silent, position)
             else:
-                warnings.filterwarnings("ignore")
+                warnings.simplefilter("ignore")
                 with self.log.silent():
                     return fn(self, device, global_rank, True, position)
                 
