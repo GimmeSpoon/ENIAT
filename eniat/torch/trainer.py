@@ -159,11 +159,11 @@ class TorchTrainer(Trainer, TorchPredictor):
         saved = False
 
         if self.conf.resume:
-            print(type(self.conf.resume_step), type(self.conf.resume_dir))
-            self.conf.resume_step = int(self.conf.resume_step)
-
-            if not isinstance(self.conf.resume_dir, str) or not os.path.exists(self.conf.resume_dir):
+            if not isinstance(self.conf.resume_step, int):
                 raise ValueError("Tried to resume training state, but 'resume_step' is not valid.")
+
+            if not os.path.exists(os.path.abspath(self.conf.resume_dir)):
+                raise ValueError("Tried to resume training state, but 'resume_dir' is not valid.")
 
             model_path = os.path.join(self.conf.resume_dir, f'model_{self.conf.resume_step}.cpt')
             state_path = os.path.join(self.conf.resume_dir, f'state_{self.conf.resume_step}.cpt')
@@ -223,7 +223,7 @@ class TorchTrainer(Trainer, TorchPredictor):
 
         if dist.is_initialized():
             self.learner.opt.consolidate_state_dict()
-
+            
         if not saved and (not dist.is_initialized() or dist.get_rank() == 0):
             self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
