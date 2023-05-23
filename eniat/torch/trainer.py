@@ -142,7 +142,7 @@ class TorchTrainer(Trainer, TorchPredictor):
     def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
         dataset = self.course.get_dataset(dataset)
         if dist.is_initialized():
-            return DataLoader(dataset, batch_size=self.conf.batch_size, num_workers=self.conf.num_workers) if not self._dist else \
+            return DataLoader(dataset, batch_size=self.conf.batch_size, num_workers=self.conf.num_workers) if not dist.is_initialized() else \
             DataLoader(dataset, batch_size=self.conf.batch_size,  num_workers=self.conf.num_workers, sampler=DistributedSampler(dataset, self.conf.env.world_size, self.conf.env.global_rank))
         else:
             return DataLoader( dataset, num_workers=self.conf.num_workers)
