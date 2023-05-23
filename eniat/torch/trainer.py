@@ -159,6 +159,7 @@ class TorchTrainer(Trainer, TorchPredictor):
         saved = False
 
         if self.conf.resume:
+            print(type(self.conf.resume_step), type(self.conf.resume_dir))
             self.conf.resume_step = int(self.conf.resume_step)
 
             if not isinstance(self.conf.resume_dir, str) or not os.path.exists(self.conf.resume_dir):
