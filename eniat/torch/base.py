@@ -72,6 +72,7 @@ class TorchPredictor():
         raise NotImplementedError
 
     def _ddp_init(self, local_rank:int, fname:str, _hc=None, silent:bool=False, position:int=0) -> None:
+        print("ddp entrypoint")
         configure_log(_hc.job_logging, _hc.verbose)
         self.hc = _hc
         self.log.info("setting DDP environment...")
