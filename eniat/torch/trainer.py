@@ -218,7 +218,8 @@ class TorchTrainer(Trainer, TorchPredictor):
 
         if dist.is_initialized():
             self.learner.opt.consolidate_state_dict()
-        self._save_checkpoint(self.conf.max_step, self.conf.unit)
+        if not dist.is_initialized() or dist.get_rank() == 0:
+            self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
         if dist.is_initialized():
             dist.destroy_process_group()
