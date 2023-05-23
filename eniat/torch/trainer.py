@@ -94,7 +94,7 @@ class TorchTrainer(Trainer, TorchPredictor):
     
     def set_rand_state(self, state:dict) -> None:
         if self.conf.env.type != 'single':
-            print(state['cuda'])
+            print(type(state['cuda']))
             torch.cuda.set_rng_state_all(state['cuda'])
         else:
             torch.cuda.set_rng_state(state['cuda'])
