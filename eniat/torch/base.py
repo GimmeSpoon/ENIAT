@@ -122,7 +122,7 @@ class TorchPredictor():
     
     @distributed
     def predict(self, device:Union[int, str], global_rank:int=None, silent:bool=False, position=0):
-        self.prepare(device, 'predict', self.conf.compile, self.learner.conf, self.data_conf, self.log, self.conf.env.optimizer if 'optimizer' in self.conf.env else None)
+        self.prepare(device, 'predict', self.conf.accel, self.learner_conf, self.data_conf, self.log, self.conf.env.optimizer if 'optimizer' in self.conf.env else None)
 
         ret = []
         with logging_redirect_tqdm():

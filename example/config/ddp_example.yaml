@@ -6,6 +6,7 @@ resume_dir: '/home/user/training_state/221225/'
 keep_origin_path: False
 
 task: fit_n_eval
+type: torch
 
 logger:
   type: StateLogger

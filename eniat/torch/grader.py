@@ -1,12 +1,16 @@
-from typing import TypeVar, Union, Literal, Sequence
+from typing import Callable, TypeVar, Union, Literal, Sequence, Any
 from ..base import Grader, Learner
 from ..data import Course
 from .base import TorchPredictor
+from omegaconf import DictConfig
 
 C = TypeVar('C', bound=Course)
 L = TypeVar('L', bound=Learner)
 
 class TorchGrader (Grader, TorchPredictor):
+
+    def __init__(self, conf: DictConfig, methods: str | Callable[..., Any] | Sequence[str | Callable[..., Any]] = None, logger=None, course: C | None = None, options: list[dict] = None) -> None:
+        super().__init__(conf, methods, logger, course, options)
 
     def eval(
             self,
