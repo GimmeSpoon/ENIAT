@@ -175,6 +175,7 @@ class TorchTrainer(Trainer, TorchPredictor):
             self.set_rand_state(checkpoint['rng_state'])
             self.conf.init_step = checkpoint['timestep']
             self.conf.unit = checkpoint['unit']
+            self.learner.to(device)
 
             if self.conf.unit == 'step':
                 current_step = self.conf.init_step
