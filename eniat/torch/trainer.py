@@ -156,10 +156,10 @@ class TorchTrainer(Trainer, TorchPredictor):
         self.prepare(device, 'fit', self.conf.accel, self.learner_conf, self.data_conf, self.log, self.conf.env.optimizer)
 
         current_step = 0
+        saved = False
 
         if self.conf.resume:
-            if not isinstance(self.conf.resume_step, int):
-                raise ValueError("Tried to resume training state, but 'resume_step' is not valid.")
+            self.conf.resume_step = int(self.conf.resume_step)
 
             if not isinstance(self.conf.resume_dir, str) or not os.path.exists(self.conf.resume_dir):
                 raise ValueError("Tried to resume training state, but 'resume_step' is not valid.")
@@ -181,6 +181,8 @@ class TorchTrainer(Trainer, TorchPredictor):
         with logging_redirect_tqdm():
             for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
                 for batch in (step_bar:=tqdm(self.loader if self.conf.unit == 'epoch' else range(self.conf.init_step, self.conf.max_step), desc='Steps', unit='step', position=1, leave=False, disable=silent)):
+
+                    saved = False
 
                     batch = to_tensor(batch)
                     self.learner.model.train(True)
@@ -204,6 +206,7 @@ class TorchTrainer(Trainer, TorchPredictor):
                                 self.learner.opt.consolidate_state_dict()
                             if not dist.is_initialized() or dist.get_rank() == 0:
                                 self._save_checkpoint(current_step, 'step')
+                                saved = True
 
                 if self.learner.sch:
                     self.learner.sch.step()
@@ -215,10 +218,12 @@ class TorchTrainer(Trainer, TorchPredictor):
                                 self.learner.opt.consolidate_state_dict()
                         if not dist.is_initialized() or dist.get_rank() == 0:
                             self._save_checkpoint(epoch+1, 'epoch')
+                            saved = True
 
         if dist.is_initialized():
             self.learner.opt.consolidate_state_dict()
-        if not dist.is_initialized() or dist.get_rank() == 0:
+
+        if not saved and (not dist.is_initialized() or dist.get_rank() == 0):
             self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
         if dist.is_initialized():

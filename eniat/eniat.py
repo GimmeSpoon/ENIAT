@@ -49,7 +49,7 @@ class Manager():
             if self.cfg.task == "fit" or self.cfg.task == "train":
                 trainer.fit()
             if self.cfg.task == "fit_n_eval" or self.cfg.task == "train_n_test":
-                trainer.fit(eval=True)
+                trainer.fit()
             elif self.cfg.task == "eval" or self.cfg.task == "test":
                 trainer.eval()
             elif self.cfg.task == "predict" or self.cfg.task == "infer":
