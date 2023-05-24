@@ -65,10 +65,10 @@ class TorchPredictor():
         if dataset is None:
             dataset = self.course.get_dataset(data_label)
         if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
-            return DataLoader(dataset, batch_size=self.conf.batch_size, num_workers=self.conf.num_workers) if not dist.is_initialized() else \
-            DataLoader(dataset, batch_size=self.conf.batch_size,  num_workers=self.conf.num_workers, sampler=DistributedSampler(dataset, self.conf.env.world_size, self.conf.env.global_rank))
+            return DataLoader(dataset, batch_size=self.conf.batch_size, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory) if not dist.is_initialized() else \
+            DataLoader(dataset, batch_size=self.conf.batch_size, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory, sampler=DistributedSampler(dataset, self.conf.env.world_size, self.conf.env.global_rank))
         else:
-            return DataLoader( dataset, num_workers=self.conf.num_workers)
+            return DataLoader( dataset, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory)
 
     def _ddp_init(self, local_rank:int, fname:str, _hc=None, silent:bool=False, position:int=0, final:bool=False, *args) -> None:
         configure_log(_hc.job_logging, _hc.verbose)
@@ -105,7 +105,8 @@ class TorchPredictor():
             data_label:str=None,
             compile:bool=False,
             learner_cfg=None,
-            data_cfg=None, log=None,
+            data_cfg=None,
+            log=None,
             resume_model:bool=False,
             resume_opt:bool=False,
             resume_dir:str=None,
@@ -120,26 +121,26 @@ class TorchPredictor():
         # learner
         if learner_cfg is not None:
             self.learner, state = load_learner(learner_cfg, log, resume_model, resume_opt, resume_dir, resume_step)
-        model = self.learner.model
+            model = self.learner.model
 
-        if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
-            model = torch.compile(DDP(model.to(device))) if compile else DDP(model)
-            optim = self.get_dist_opt(dist_opt, self.learner.opt, model.parameters())
-            self.learner.opt = optim
-        else:
-            if self.conf.env.type == "DP":
-                model = torch.compile(DP(model)).to(device) if compile else DP(model).to(device)
+            if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
+                model = torch.compile(DDP(model.to(device))) if compile else DDP(model)
+                optim = self.get_dist_opt(dist_opt, self.learner.opt, model.parameters())
+                self.learner.opt = optim
             else:
-                model = torch.compile(model).to(device) if compile else model.to(device)
+                if self.conf.env.type == "DP":
+                    model = torch.compile(DP(model)).to(device) if compile else DP(model).to(device)
+                else:
+                    model = torch.compile(model).to(device) if compile else model.to(device)
 
-        self.learner.model = model
+            self.learner.model = model
 
         return state or None
 
     @distributed
-    def predict(self, device:Union[int, str], global_rank:int=None, silent:bool=False, position=0, final:bool=True, data_label:str='predict', keep_learner:bool=False):
-        
-        self.prepare(device, data_label, self.conf.accel, self.learner_conf if keep_learner else self.learner_conf, self.data_conf, self.log, self.conf.env.optimizer if 'optimizer' in self.conf.env else None)
+    def predict(self, device:Union[int, str], global_rank:int=None, silent:bool=False, position=0, final:bool=True, data_label:str='predict', skip_prepare:bool=False):
+        if not skip_prepare:
+            self.prepare(device, data_label, self.conf.accel, self.learner_conf, self.data_conf, self.log, self.conf.env.optimizer if 'optimizer' in self.conf.env else None)
 
         ret = []
         gt = []

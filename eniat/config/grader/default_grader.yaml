@@ -4,7 +4,7 @@ interval: ${trainer.save_interval}
 methods: []
 seed:
 accel: False
-precision: 32
+precision:
 batch_size:
 loader:
   shuffle: False

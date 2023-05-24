@@ -7,6 +7,10 @@ import warnings
 
 D = TypeVar('D', bound=Course)
 
+class ConfigurationError(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+
 class Warning ():
     def __init__(self, logger) -> None:
         self.logger = logger
