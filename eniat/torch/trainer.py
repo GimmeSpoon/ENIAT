@@ -3,7 +3,7 @@ from .grader import TorchGrader
 from .base import TorchPredictor, to_tensor, distributed
 from ..base import Trainer, Warning
 from ..data.course import Course, FullCourse
-from .learner import TorchLearner, load_learner
+from .learner import TorchLearner
 from ..utils.statelogger import StateLogger
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -94,8 +94,9 @@ class TorchTrainer(Trainer, TorchPredictor):
     
     def set_rand_state(self, state:dict) -> None:
         if self.conf.env.type != 'single':
-            print(type(state['cuda']), len(state['cuda']), type(state['cuda'][0]))
             torch.cuda.set_rng_state_all(state['cuda'])
+            for i, rng_state in enumerate(state['cuda']):
+                torch.cuda.set_rng_state(rng_state)
         else:
             torch.cuda.set_rng_state(state['cuda'])
         torch.set_rng_state(state['torch'])
@@ -154,28 +155,15 @@ class TorchTrainer(Trainer, TorchPredictor):
     @distributed
     def fit(self, device:int=0, global_rank:int=0, silent:bool=False, position:int=0):
         
-        self.prepare(device, 'fit', self.conf.accel, self.learner_conf, self.data_conf, self.log, self.conf.env.optimizer)
+        resumed = self.prepare(device, 'fit', self.conf.accel, self.learner_conf, self.data_conf, self.log, dist_opt=self.conf.env.optimizer, resume_model=self.conf.resume_model, resume_opt=self.conf.resume_opt, resume_dir=self.conf.resume_dir, resume_step=self.conf.resume_step)
 
         current_step = 0
         saved = False
 
-        if self.conf.resume:
-            if not isinstance(self.conf.resume_step, int):
-                raise ValueError("Tried to resume training state, but 'resume_step' is not valid.")
-
-            if not os.path.exists(os.path.abspath(self.conf.resume_dir)):
-                raise ValueError(f"Tried to resume training state, but resume_dir[:{self.conf.resume_dir}] is not valid.")
-
-            model_path = os.path.join(self.conf.resume_dir, f'model_{self.conf.resume_step}.cpt')
-            state_path = os.path.join(self.conf.resume_dir, f'state_{self.conf.resume_step}.cpt')
-
-            self.learner.load_model(path=model_path)
-
-            checkpoint = torch.load(state_path, map_location=torch.device(device))
-            self.learner.load_optimizer(state=checkpoint['optimizer'])
-            self.set_rand_state(checkpoint['rng_state'])
-            self.conf.init_step = checkpoint['timestep']
-            self.conf.unit = checkpoint['unit']
+        if resumed:
+            self.set_rand_state(resumed['rng_state'])
+            self.conf.init_step = resumed['timestep']
+            self.conf.unit = resumed['unit']
 
             if self.conf.unit == 'step':
                 current_step = self.conf.init_step

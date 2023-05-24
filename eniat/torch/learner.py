@@ -9,17 +9,21 @@ from torch.optim import Optimizer
 from hydra.utils import instantiate
 from ..utils.conf import conf_instantiate, _dynamic_import
 from importlib import import_module
+import os
 
 T_co = TypeVar('T_co', covariant=True)
 O = TypeVar('O', bound=Optimizer)
 
-def load_learner (conf, log):
+def load_learner (conf, log, resume_model:bool=False, resume_opt:bool=False, resume_dir:str = None, resume_step:int=None):
     # Model Load
     model = conf_instantiate(conf.model)
     log.info("Model loaded...")
 
-    if not conf.resume:
-        log.warning("'resume' is set to False. The model will be initialized without loading a checkpoint.")
+    if not resume_model:
+        log.warning("'resume_model' is set to False. The model will be initialized without loading a checkpoint.")
+    else:
+        model.load_state_dict(torch.load(model_resume_path:=(os.path.join(resume_dir, f'model_{resume_step}.cpt'))))
+        log.info(f"Weights are resumed from {model_resume_path}.")
     # loss
     loss = instantiate(conf.loss) if conf.loss and conf.loss._target_ else None
     if loss:
@@ -32,6 +36,11 @@ def load_learner (conf, log):
         log.info("Optimizer loaded...")
     else:
         log.warning("Optimizer is not defined. Are you sure you wanted this?")
+    if not resume_opt:
+        log.warning("'resume_opt' is set to False. Training will be initiated without checkpoints.")
+    else:
+        optim.load_state_dict(ret_state:=(torch.load(opt_resume_path:=(os.path.join(resume_dir, f'state_{resume_step}.cpt')))))
+        log.info(f"Training states are resume from {opt_resume_path}.")
     # scheduler
     schlr = None# instantiate(conf.learner.scheduler, lr_lambda=lambda x: x**conf.learner.scheduler.lr_lambda, optimizer=optim) if conf.learner.scheduler and conf.learner.scheduler._target_ else None
     if schlr:
@@ -42,24 +51,21 @@ def load_learner (conf, log):
     # instantiate learner
     if 'path' in conf and conf.path:
         _mod, _bn = _dynamic_import(conf.path)
-        learner = getattr(_mod, conf.cls)(model, loss, optim, schlr, conf.resume, conf.resume_path)
+        learner = getattr(_mod, conf.cls)(model, loss, optim, schlr, resume_model, resume_opt, resume_dir)
     else:
-        learner = getattr(import_module('.torch.learner', 'eniat'), conf.cls)(model, loss, optim, schlr, conf.resume, conf.resume_path)
+        learner = getattr(import_module('.torch.learner', 'eniat'), conf.cls)(model, loss, optim, schlr, resume_model, resume_opt, resume_dir)
     if learner:
         log.info("Learner instance created.")
 
-    return learner
+    return learner, None if not resume_opt else learner, ret_state
 
 class TorchLearner(Learner, Generic[T_co]):
-    def __init__(self, model:Module, criterion=None, optimizer=None, scheduler=None, resume:bool=False, resume_path:str=None) -> None:
+    def __init__(self, model:Module, criterion=None, optimizer=None, scheduler=None) -> None:
         super(TorchLearner).__init__()
         self.model = model
         self.loss_fn = criterion
         self.opt = optimizer
         self.sch = scheduler
-
-        if resume:
-            self.load_model(path=resume_path)
 
     @abstractmethod
     def fit(self, batch:Tensor, device:int, logger):
@@ -81,7 +87,7 @@ class TorchLearner(Learner, Generic[T_co]):
             self.opt.load_state_dict(state)
         else:
             with open(path, 'rb') as f:
-                self.opt.load_state_dict(torch.load(f))
+                self.opt.load_state_dict(torch.load(f)['optimizer'])
 
     @property
     def get_model(self):

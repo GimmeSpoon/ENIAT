@@ -1,6 +1,7 @@
 working_dir: ${hydra.runtime.output_dir}
 
-resume: False
+resume_model: False
+resume_opt: False
 resume_step:
 resume_dir:
 

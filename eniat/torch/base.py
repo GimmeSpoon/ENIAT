@@ -94,13 +94,13 @@ class TorchPredictor():
             return PostLocalSGDOptimizer(opt, averagers.PeriodicModelAverager(**kwargs))
         raise ValueError(f'Distributed optimizer "{method}" is not valid. Configure as one of following choices:[zero, postlocal]')
     
-    def prepare (self, device:int, task:Literal['fit', 'eval', 'predict'], compile, learner_cfg, data_cfg, log=None, dist_opt:str=None):
+    def prepare (self, device:int, task:Literal['fit', 'eval', 'predict'], compile, learner_cfg, data_cfg, log=None, resume_model:bool=False, resume_opt:bool=False, resume_dir:str=None, resume_step:int=None, dist_opt:str=None):
         # data
         self.course = get_course_instance(data_cfg, log)
         self.loader = self.get_loader(task)
 
         # learner
-        self.learner = load_learner(learner_cfg, log)
+        self.learner, state = load_learner(learner_cfg, log, resume_model, resume_opt, resume_dir, resume_step)
         model = self.learner.model
 
         if dist.is_initialized():
@@ -114,6 +114,8 @@ class TorchPredictor():
                 model = torch.compile(model).to(device) if compile else model.to(device)
 
         self.learner.model = model
+
+        return state or None
     
     @distributed
     def predict(self, device:Union[int, str], global_rank:int=None, silent:bool=False, position=0):
