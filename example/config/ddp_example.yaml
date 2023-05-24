@@ -37,7 +37,7 @@ grader:
   eval_interval: 1
   remote:
     enable: False
-  distributed:
+  env:
     type: DDP
     debug: False
     local_size: 2

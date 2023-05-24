@@ -5,12 +5,15 @@ resume_opt: False
 resume_step:
 resume_dir:
 
-accel: False # PyTorch 2.0 compile
-num_workers: 0
-precision: 16
-
 seed:
+accel: False # PyTorch 2.0 compile
+precision:
+gradient_scale: False
 batch_size:
+loader:
+  shuffle: False
+  num_workers: 0
+  pin_memory: False
 
 init_step: 0
 max_step: 0

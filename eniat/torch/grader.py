@@ -15,11 +15,12 @@ class TorchGrader (Grader, TorchPredictor):
     def eval(
             self,
             learner:L,
-            device:Union[int, str, Sequence[int]]=None,
+            env_conf:DictConfig,
             data:C=None,
             timestep:int=None,
             unit:Literal['epoch', 'step']=None,
             step_check:bool=False,
+            final:bool=True,
             position:int = 0
             ):
             
@@ -31,33 +32,20 @@ class TorchGrader (Grader, TorchPredictor):
 
         self.log.info("Evaluation started...")
 
-        if isinstance(device, str):
-            if device == 'cpu':
-                self.log.info("Evaluation environment set on CPU.")
-            elif device == 'gpu' or device == 'cuda':
-                device = 0
-                self.log.warning("Evaluation environment is not explicitly set. Device set to 0 as default.")
-            else:
-                raise ValueError(f"Evaluation environment configuration is not valid: {device}")
-        elif isinstance(device, int):
-            self.log.info(f"Evaluation environment set on device {device}.")
-        else:
-            if not self.conf.distributed.enable:
-                raise ValueError("Tried to initiate evaluation processes on parallel, but the configuration has been set to disable it.")
-            self.log.info(f"Evaluation environment set on devices {','.join(device)}")
-            
-        if not data and self.course:
-            data = self.course
-
         if data is None:
-            raise ValueError("No data is given to grader. Evaluation aborted.")
+            data = self.course
+        
+        self.loader = self.get_loader('eval', data)
 
         self.log.info("Test dataset prepared.")
 
-        if self.conf.distributed.enable:
-            # Distributed Evaluation
-            res = self.predict()
+        if self.conf.env.type == 'remote':
+            raise NotImplementedError("sorry, remote grader is still in development.")
+        elif self.conf.env.type == 'single':
+            
+            res, gt = self.predict(position=position, silent=True, final=final, data_label='eval', skip_prepare=True)
         else:
-            learner.to(device)
+            res, gt = self.predict(silent=True, final=final, data_label='eval')
+            eval_result = self.compute(res, gt)
 
-        self.log.info("Evaluation ended. The result is as below.\n")
+        self.log.info("Evaluation completed. The result is as below.\n"+eval_result.__repr__())

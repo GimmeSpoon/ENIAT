@@ -10,6 +10,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader, DistributedSampler
+from torch.cuda.amp import GradScaler
 import os
 import random
 import numpy as np
@@ -21,6 +22,7 @@ import warnings
 T = TypeVar('T', bound=TorchLearner)
 C = TypeVar('C', bound=FullCourse)
 L = TypeVar('L', bound=StateLogger)
+G = TypeVar('G', bound=TorchGrader)
 
 def torchload(cfg:DictConfig, log:L):
 
@@ -36,7 +38,7 @@ def torchload(cfg:DictConfig, log:L):
     
     return trainer
 
-class TorchTrainer(Trainer, TorchPredictor):
+class TorchTrainer(TorchPredictor, Trainer):
     r"""PyTorch compatible trainer class.
     Automatically manage training steps, logging, and saving checkpoints.
     It only occupies one device(GPU)"""
@@ -64,6 +66,10 @@ class TorchTrainer(Trainer, TorchPredictor):
         self.hc = HydraConfig.get()
 
         warnings.showwarning = lambda *args: self.log.warning(args[0])
+
+        self.hooks = {
+            'f': [], 'b': [], 'bs': [], 'as': [], 'be': [],'ae': []
+        }
 
         if 'seed' in conf and conf['seed']:
             self.rand_all(conf.seed)
@@ -144,21 +150,25 @@ class TorchTrainer(Trainer, TorchPredictor):
         self._save_state(timestep)
         self.log.info(f"Checkpoint at {unit} {timestep} saved.")
 
-    def get_loader(self, dataset:Literal['fit', 'eval', 'predict']) -> DataLoader:
-        dataset = self.course.get_dataset(dataset)
-        if dist.is_initialized():
-            return DataLoader(dataset, batch_size=self.conf.batch_size, num_workers=self.conf.num_workers) if not dist.is_initialized() else \
-            DataLoader(dataset, batch_size=self.conf.batch_size,  num_workers=self.conf.num_workers, sampler=DistributedSampler(dataset, self.conf.env.world_size, self.conf.env.global_rank))
-        else:
-            return DataLoader( dataset, num_workers=self.conf.num_workers)
+    def hook(self, when:Literal['f', 'b', 'bs', 'as', 'be', 'ae'], fn:Callable) -> None:
+        self.hooks[when].append(fn)
+
+    def get_hooks(self, when:Literal['f', 'b', 'bs', 'as', 'be', 'ae']) -> list[Callable]:
+        return self.hooks[when]
+    
+    def _take_hook(self, when:Literal['f', 'b', 'bs', 'as', 'be', 'ae'], *args) -> None:
+        for fn in self.hooks[when]:
+            fn(*args)
 
     @distributed
-    def fit(self, device:int=0, global_rank:int=0, silent:bool=False, position:int=0):
+    def fit(self, device:int=0, global_rank:int=0, silent:bool=False, position:int=0, data_label:str='fit'):
         
-        resumed = self.prepare(device, 'fit', self.conf.accel, self.learner_conf, self.data_conf, self.log, dist_opt=self.conf.env.optimizer, resume_model=self.conf.resume_model, resume_opt=self.conf.resume_opt, resume_dir=self.conf.resume_dir, resume_step=self.conf.resume_step)
+        resumed = self.prepare(device, data_label, self.conf.accel, self.learner_conf, self.data_conf, self.log, dist_opt=self.conf.env.optimizer, resume_model=self.conf.resume_model, resume_opt=self.conf.resume_opt, resume_dir=self.conf.resume_dir, resume_step=self.conf.resume_step)
 
         current_step = 0
         saved = False
+        avg_loss = None
+        loss = None
 
         if resumed:
             self.set_rand_state(resumed['rng_state'])
@@ -169,27 +179,61 @@ class TorchTrainer(Trainer, TorchPredictor):
                 current_step = self.conf.init_step
 
         with logging_redirect_tqdm():
-            for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=0, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
-                for batch in (step_bar:=tqdm(self.loader if self.conf.unit == 'epoch' else range(self.conf.init_step, self.conf.max_step), desc='Steps', unit='step', position=1, leave=False, disable=silent)):
-
+            for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=position, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
+                # Before epoch hook
+                self._take_hook('be', epoch+1, avg_loss, self.learner)
+                avg_loss = whole_batch = 0
+                for batch in (step_bar:=tqdm(self.loader if self.conf.unit == 'epoch' else range(self.conf.init_step, self.conf.max_step), desc='Steps', unit='step', position=position+1, leave=False, disable=silent)):
                     saved = False
-
                     batch = to_tensor(batch)
                     self.learner.model.train(True)
-                    pred = self.learner.fit(batch, device, self.log)
-                    tr_loss = self.learner.loss_fn(pred, batch[1].to(device))
                     self.learner.opt.zero_grad()
-                    tr_loss.backward()
-                    self.learner.opt.step()
+                    # Before step hook
+                    self._take_hook('bs', current_step+1, loss, self.learner, self)
+
+                    # forward
+                    if self.conf.precision is None:
+                        loss = self.learner.fit(batch, device, self.log)
+                    else:
+                        with torch.autocast(torch.device(device), dtype=getattr(torch, self.conf.precision)):
+                            loss = self.learner.fit(batch, device, self.log)
+
+                    # forward hook
+                    self._take_hook('f', current_step+1, loss, self.learner, self)
+
+                    # backward & optimizer step
+                    if self.conf.gradient_scale:
+                        scaler = GradScaler(loss)
+                        scaler.scale(loss).backward()
+                        self._take_hook('b', current_step+1, loss, self.learner, self)
+                        scaler.step(self.learner.opt)
+                        scaler.update()
+                    else:
+                        scaler = None
+                        loss.backward()
+                        self._take_hook('b', current_step+1, loss, self.learner, self)
+                        self.learner.opt.step()
+
+                    # After step hook
+                    self._take_hook('as', current_step+1, loss, self.learner, self)
+
                     self.learner.model.train(False)
 
-                    step_postfix = {'training_loss' : tr_loss.item(), 'step': current_step+1}
+                    step_postfix = {'training_loss' : loss.item(), 'step': current_step+1}
                     self.log.log_state(step_postfix)
-                    step_postfix['training_loss'] = '{:.5f}'.format(step_postfix['training_loss'])
-                    step_bar.set_postfix(step_postfix)
+                    step_postfix['training_loss'] = '{:.8f}'.format(step_postfix['training_loss'])
+                    step_bar.set_postfix(step_postfix['training_loss'])
+
+                    avg_loss += loss.item() * (_cbs:=batch[0].size(dim=0))
+                    whole_batch += _cbs
 
                     current_step += 1
 
+                    #Evaluation (step)
+                    if self.grader is not None:
+                        self.grader.eval(self.learner, self, self.course.get_dataset('eval'), current_step, 'step', step_check=True, final=False, position=position+2)
+
+                    #Checkpoint (step)
                     if self.conf.unit == 'step':
                         if current_step % self.conf.save_interval == 0:
                             if dist.is_initialized():
@@ -197,9 +241,18 @@ class TorchTrainer(Trainer, TorchPredictor):
                             if not dist.is_initialized() or dist.get_rank() == 0:
                                 self._save_checkpoint(current_step, 'step')
                                 saved = True
-
+                
+                # Scheduler
                 if self.learner.sch:
                     self.learner.sch.step()
+
+                epoch_postfix = {'avg_loss' : avg_loss / whole_batch, 'step': epoch+1}
+                self.log.log_state(epoch_postfix)
+                epoch_postfix['avg_loss'] = '{:.8f}'.format(epoch_postfix['avg_loss'])
+                epoch_bar.set_postfix(epoch_postfix['avg_loss'])
+
+                # After epoch hook
+                self._take_hook('ae', epoch+1, avg_loss, self.learner, self)
 
                 if self.conf.unit == 'epoch':
                     self.log.info(f"Epoch {epoch+1} finished")

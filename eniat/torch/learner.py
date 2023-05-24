@@ -121,11 +121,9 @@ class SupremeLearner (TorchLearner):
         x, y = batch
         x, y = x.to(device), y.to(device)
         model = self.model.to(device)
-        pred = model(x)
-        return self.loss_fn(pred, y)
+        return self.loss_fn(model(x), y)
     
     def predict(self, batch: Tensor, device: int, logger):
         batch = batch.to(device)
         model = self.model.to(device)
-        pred = model(batch)
-        return pred
+        return model(batch)

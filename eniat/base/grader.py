@@ -51,9 +51,19 @@ def sk_eval(preds, gt, methods:Union[str, Sequence[str]], **kwargs):
 
 class Grader():
     
-    class Result():
-        def __init__(self) -> None:
-            pass
+    class EvaluationResult():
+        def __init__(self, labels:Union[Sequence[str], str]) -> None:
+            self.result = {}
+            if isinstance(labels, str):
+                labels = [str]
+            for label in labels:
+                self.result[label] = None
+
+        def done(self, label:str, result):
+            self.result[label] = result
+
+        def __repr__(self) -> str:
+            return '\n'.join([f'{label:20} : {res}' for label, res in self.result.items()])
     
     def __init__(self, conf:DictConfig, methods:Union[str, Callable, Sequence[Union[str, Callable]]]=None, logger=None, course:C=None, options:list[dict]=None) -> None:
         self.conf = conf

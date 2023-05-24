@@ -28,14 +28,14 @@ def to_tensor(batch):
     return batch
 
 def distributed (fn:Callable) -> Callable:
-    def wrapper(self, device=None, global_rank=None, silent=False, position=0):
+    def wrapper(self, device=None, global_rank=None, silent=False, position=0, final=True, **kwargs):
         if not dist.is_initialized():
 
             if self.conf.env.type == "single":
                 device = device if (device is not None) else (self.conf.env.dev_id if (isinstance(self.conf.env.dev_id, int)) else self.conf.env.dev_id[0])
-                return fn(self, device, device, silent, position)
+                return fn(self, device, device, silent, position, final, **(kwargs or {}))
             elif self.conf.env.type=="DP":
-                return fn(self, 'cuda', 0, silent, position)
+                return fn(self, 'cuda', 0, silent, position, final, **(kwargs or {}))
 
             if self.conf.env.debug:
                 os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
@@ -45,25 +45,30 @@ def distributed (fn:Callable) -> Callable:
                 #torchrun
                 self.hc = HydraConfig.get()
                 self._torchrun_init(self)
-                return fn(int(os.environ['LOCAL_RANK']), int(os.environ['RANK']), silent, position)
+                return fn(int(os.environ['LOCAL_RANK']), int(os.environ['RANK']), silent, position, final, **(kwargs or {}))
             else:
                 #DDP
-                spawn(self._ddp_init, (fn.__name__, HydraConfig.get(), silent, position), nprocs=self.conf.env.local_size, join=True)
+                spawn(self._ddp_init, (fn.__name__, HydraConfig.get(), silent, position, final, *[kwargs[key] for key in kwargs]), nprocs=self.conf.env.local_size, join=True)
         else:
             if dist.get_rank() == 0:
-                return fn(self, device, global_rank, silent, position)
+                return fn(self, device, global_rank, silent, position, final, **(kwargs or {}))
             else:
                 warnings.simplefilter("ignore")
                 with self.log.silent():
-                    return fn(self, device, global_rank, True, position)
+                    return fn(self, device, global_rank, True, position, final, **(kwargs or {}))
                 
     return wrapper
 
 class TorchPredictor():
 
-    @abstractmethod
-    def get_loader(self):
-        raise NotImplementedError
+    def get_loader(self, data_label:str, dataset=None) -> DataLoader:
+        if dataset is None:
+            dataset = self.course.get_dataset(data_label)
+        if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
+            return DataLoader(dataset, batch_size=self.conf.batch_size, num_workers=self.conf.num_workers) if not dist.is_initialized() else \
+            DataLoader(dataset, batch_size=self.conf.batch_size,  num_workers=self.conf.num_workers, sampler=DistributedSampler(dataset, self.conf.env.world_size, self.conf.env.global_rank))
+        else:
+            return DataLoader( dataset, num_workers=self.conf.num_workers)
 
     def _ddp_init(self, local_rank:int, fname:str, _hc=None, silent:bool=False, position:int=0) -> None:
         configure_log(_hc.job_logging, _hc.verbose)
@@ -94,16 +99,30 @@ class TorchPredictor():
             return PostLocalSGDOptimizer(opt, averagers.PeriodicModelAverager(**kwargs))
         raise ValueError(f'Distributed optimizer "{method}" is not valid. Configure as one of following choices:[zero, postlocal]')
     
-    def prepare (self, device:int, task:Literal['fit', 'eval', 'predict'], compile, learner_cfg, data_cfg, log=None, resume_model:bool=False, resume_opt:bool=False, resume_dir:str=None, resume_step:int=None, dist_opt:str=None):
+    def prepare (
+            self,
+            device:int,
+            data_label:str=None,
+            compile:bool=False,
+            learner_cfg=None,
+            data_cfg=None, log=None,
+            resume_model:bool=False,
+            resume_opt:bool=False,
+            resume_dir:str=None,
+            resume_step:int=None,
+            dist_opt:str=None
+            ):
         # data
-        self.course = get_course_instance(data_cfg, log)
-        self.loader = self.get_loader(task)
+        if data_cfg is not None and data_label is not None:
+            self.course = get_course_instance(data_cfg, log)
+            self.loader = self.get_loader(data_label)
 
         # learner
-        self.learner, state = load_learner(learner_cfg, log, resume_model, resume_opt, resume_dir, resume_step)
+        if learner_cfg is not None:
+            self.learner, state = load_learner(learner_cfg, log, resume_model, resume_opt, resume_dir, resume_step)
         model = self.learner.model
 
-        if dist.is_initialized():
+        if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
             model = torch.compile(DDP(model.to(device))) if compile else DDP(model)
             optim = self.get_dist_opt(dist_opt, self.learner.opt, model.parameters())
             self.learner.opt = optim
@@ -116,19 +135,29 @@ class TorchPredictor():
         self.learner.model = model
 
         return state or None
-    
+
     @distributed
-    def predict(self, device:Union[int, str], global_rank:int=None, silent:bool=False, position=0):
-        self.prepare(device, 'predict', self.conf.accel, self.learner_conf, self.data_conf, self.log, self.conf.env.optimizer if 'optimizer' in self.conf.env else None)
+    def predict(self, device:Union[int, str], global_rank:int=None, silent:bool=False, position=0, final:bool=True, data_label:str='predict', keep_learner:bool=False):
+        
+        self.prepare(device, data_label, self.conf.accel, self.learner_conf if keep_learner else self.learner_conf, self.data_conf, self.log, self.conf.env.optimizer if 'optimizer' in self.conf.env else None)
 
         ret = []
+        gt = []
         with logging_redirect_tqdm():
             for batch in (step_bar:=tqdm(self.loader, desc='Inference', unit='step', position=position, leave=False, disable=silent)):
+                if isinstance(batch, list):
+                    gt.append(batch[1].cpu())
+                    batch = to_tensor(batch[0])
                 batch = self.to_tensor(batch)
                 self.learner.to(device)
                 self.learner.eval()
                 with torch.no_grad():
-                    pred = self.learner.predict(batch).detach().cpu()
+                    if self.conf.precision is None:
+                        pred = self.learner.predict(batch).detach().cpu()
+                    else:
+                        with torch.autocast(torch.device(device), dtype=getattr(torch, self.conf.precision)):
+                            pred = self.learner.predict(batch)
+                        pred = pred.detach().cpu()
 
                 if dist.is_initialized() and dist.get_rank() == 0:
                     gathered = torch.zeros((dist.get_world_size() * pred[0], *pred.shape[1:]))
@@ -137,9 +166,16 @@ class TorchPredictor():
                 else:
                     ret.append(pred)
 
-        if dist.is_initialize() and dist.get_rank():
+        if dist.is_initialized() and dist.get_rank():
             dist.destroy_process_group()
             return
+        
         ret = torch.cat(ret).numpy()
-        dist.destroy_process_group()
-        return ret
+        if gt:
+            gt = torch.cat(gt).numpy()
+        else:
+            gt = None
+
+        if dist.is_initialized() and final:
+            dist.destroy_process_group()
+        return ret if gt is None else (ret, gt)
