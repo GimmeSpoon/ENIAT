@@ -70,7 +70,7 @@ class TorchPredictor():
         else:
             return DataLoader( dataset, num_workers=self.conf.num_workers)
 
-    def _ddp_init(self, local_rank:int, fname:str, _hc=None, silent:bool=False, position:int=0) -> None:
+    def _ddp_init(self, local_rank:int, fname:str, _hc=None, silent:bool=False, position:int=0, final:bool=False, *args) -> None:
         configure_log(_hc.job_logging, _hc.verbose)
         self.hc = _hc
         os.environ["LOCAL_RANK"] = str(local_rank)
@@ -80,7 +80,7 @@ class TorchPredictor():
         dist.init_process_group(backend=self.conf.env.backend, init_method=self.conf.env.init_method, world_size=self.conf.env.world_size, rank=rank)
         if not local_rank:
             self.log.info("configured DDP environment...")
-        return getattr(self, fname)(local_rank, rank, silent, position)
+        return getattr(self, fname)(local_rank, rank, silent, position, final, *args)
 
     def _torchrun_init(self):
         self.log.info("setting torchrun environment...")
