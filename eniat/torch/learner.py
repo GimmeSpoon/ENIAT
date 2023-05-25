@@ -18,6 +18,7 @@ def load_learner (conf, log, resume_model:bool=False, resume_opt:bool=False, res
     # Model Load
     model = conf_instantiate(conf.model)
     log.info("Model loaded...")
+    ret_state = None
 
     if not resume_model:
         log.warning("'resume_model' is set to False. The model will be initialized without loading a checkpoint.")
