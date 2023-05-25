@@ -46,7 +46,7 @@ def load_learner (conf, log, dist_type:Literal['single', 'DP', 'DDP', 'torchrun'
     if not resume_opt:
         log.warning("'resume_opt' is set to False. Training will be initiated without checkpoints.")
     else:
-        optim.load_state_dict(ret_state:=(torch.load(opt_resume_path:=(os.path.join(resume_dir, f'state_{resume_step}.cpt')))))
+        optim.load_state_dict((ret_state:=(torch.load(opt_resume_path:=(os.path.join(resume_dir, f'state_{resume_step}.cpt')))))['optimizer'])
         log.info(f"Training states are resume from {opt_resume_path}.")
     # scheduler
     schlr = None# instantiate(conf.learner.scheduler, lr_lambda=lambda x: x**conf.learner.scheduler.lr_lambda, optimizer=optim) if conf.learner.scheduler and conf.learner.scheduler._target_ else None
