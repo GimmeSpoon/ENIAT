@@ -115,7 +115,7 @@ class TorchLearner(Learner, Generic[T_co]):
 
 class SupremeLearner (TorchLearner):
     def __init__(self, model: Module, criterion=None, optimizer=None, scheduler=None, resume: bool = False, resume_path: str = None) -> None:
-        super().__init__(model, criterion, optimizer, scheduler, resume, resume_path)
+        super().__init__(model, criterion, optimizer, scheduler)
 
     def fit(self, batch: Tensor, device: int, logger):
         x, y = batch
