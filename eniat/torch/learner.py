@@ -53,7 +53,7 @@ def load_learner (conf, log, resume_model:bool=False, resume_opt:bool=False, res
         _mod, _bn = _dynamic_import(conf.path)
         learner = getattr(_mod, conf.cls)(model, loss, optim, schlr, resume_model, resume_opt, resume_dir)
     else:
-        learner = getattr(import_module('.torch.learner', 'eniat'), conf.cls)(model, loss, optim, schlr, resume_model, resume_opt, resume_dir)
+        learner = getattr(import_module('.torch.learner', 'eniat'), conf.cls)(model, loss, optim, schlr, resume_model, resume_dir)
     if learner:
         log.info("Learner instance created.")
 
