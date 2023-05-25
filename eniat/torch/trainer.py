@@ -221,7 +221,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                     step_postfix = {'training_loss' : loss.item(), 'step': current_step+1}
                     self.log.log_state(step_postfix)
                     step_postfix['training_loss'] = '{:.8f}'.format(step_postfix['training_loss'])
-                    step_bar.set_postfix(step_postfix['training_loss'])
+                    step_bar.set_postfix({'loss':step_postfix['training_loss']})
 
                     avg_loss += loss.item() * (_cbs:=batch[0].size(dim=0))
                     whole_batch += _cbs
@@ -248,7 +248,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                 epoch_postfix = {'avg_loss' : avg_loss / whole_batch, 'step': epoch+1}
                 self.log.log_state(epoch_postfix)
                 epoch_postfix['avg_loss'] = '{:.8f}'.format(epoch_postfix['avg_loss'])
-                epoch_bar.set_postfix(epoch_postfix['avg_loss'])
+                epoch_bar.set_postfix({'avg_loss':epoch_postfix['avg_loss']})
 
                 # After epoch hook
                 self._take_hook('ae', epoch+1, avg_loss, self.learner, self)
