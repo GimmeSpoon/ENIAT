@@ -113,6 +113,8 @@ class TorchPredictor():
             resume_step:int=None,
             dist_opt:str=None
             ):
+        
+        print(data_label)
         # data
         if data_cfg is not None and data_label is not None:
             self.course = get_course_instance(data_cfg, log)
