@@ -1,6 +1,6 @@
 from typing import TypeVar, Union, Sequence, Callable, Literal
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, DistributedSampler
 import torch.distributed as dist
 from torch.multiprocessing import spawn
 from torch.nn.parallel import DistributedDataParallel as DDP
