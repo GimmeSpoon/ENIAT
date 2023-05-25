@@ -178,7 +178,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                 current_step = self.conf.init_step
 
         with logging_redirect_tqdm():
-            for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), desc='Epoch', unit='epoch', position=position, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
+            for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), initial=self.conf.init_step, total=self.conf.max_step, desc='Epoch', unit='epoch', position=position, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
                 # Before epoch hook
                 self._take_hook('be', epoch+1, avg_loss, self.learner)
                 avg_loss = whole_batch = 0
