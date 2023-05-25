@@ -8,6 +8,7 @@ resume_dir:
 seed:
 accel: False # PyTorch 2.0 compile
 precision:
+dtype:
 gradient_scale: False
 batch_size:
 loader:

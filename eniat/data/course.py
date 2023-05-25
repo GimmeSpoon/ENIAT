@@ -10,7 +10,7 @@ def get_course_instance(cfg:DictConfig, log=None):
     _courses = FullCourse()
     for label in cfg:
         if 'cls' in cfg[label] and cfg[label]['cls']:
-            _courses.append(Course(label , conf_instantiate(cfg[label])))
+            _courses.append(Course(label, conf_instantiate(cfg[label])))
             if log:
                 log.info(f"'{label}' data is loaded.")
         elif 'path' in cfg[label] and cfg[label]['path']:

@@ -5,6 +5,7 @@ methods: []
 seed:
 accel: False
 precision:
+dtype:
 batch_size:
 loader:
   shuffle: False

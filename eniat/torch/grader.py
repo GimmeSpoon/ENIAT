@@ -5,6 +5,7 @@ from .base import TorchPredictor
 import torch
 import torch.distributed as dist
 from omegaconf import DictConfig
+import os
 
 C = TypeVar('C', bound=Course)
 L = TypeVar('L', bound=Learner)
@@ -18,24 +19,27 @@ class TorchGrader (Grader, TorchPredictor):
             self,
             learner:L,
             data:C=None,
-            env_conf:DictConfig=None,
             timestep:int=None,
             unit:Literal['epoch', 'step']=None,
             step_check:bool=False,
             final:bool=True,
-            position:int = 0
+            position:int = 0,
+            env_conf:DictConfig = None
             ):
             
         if step_check:
-            if self.conf.unit is None or self.conf.unit == 'none' or self.conf.eval_interval is None or self.conf.eval_interval == 0:
+            if self.conf.unit is None or self.conf.unit == 'none' or self.conf.interval is None or self.conf.interval == 0:
                 raise ValueError("You're trying to evaluate at preconfigured steps but configurations of Grader have no settings for eval strategy.")
-            if self.conf.unit != unit or timestep % self.conf.eval_interval != 0:
-                    return
+            if self.conf.unit != unit or timestep % self.conf.interval != 0:
+                return
 
         self.log.info("Evaluation started...")
 
         if data is None:
             data = self.course
+
+        if self.conf.env.type == 'keep':
+            self.conf.env = env_conf
         
         self.loader = self.get_loader('eval', data)
         
@@ -45,11 +49,18 @@ class TorchGrader (Grader, TorchPredictor):
 
         if self.conf.env.type == 'remote':
             raise NotImplementedError("sorry, remote grader is still in development.")
-        
-        res, gt = self.predict(position=position, silent=False, final=final, data_label='eval', skip_prepare=True)
-        eval_result = self.compute(res, gt)
+        elif self.conf.env.type == 'single':
+            res, gt = self.predict(device=self.conf.env.dev_id, global_rank=0, position=position, silent=False, final=final, data_label='eval', skip_prepare=True)
+        elif dist.is_initialized():
+            res, gt = self.predict(device=int(os.environ['LOCAL_RANK']), global_rank=dist.get_rank(), position=position, silent=False, final=final, data_label='eval', skip_prepare=True)
+        else:
+            res, gt = self.predict(position=position, silent=False, final=final, data_label='eval', skip_prepare=True)
 
-        self.log.log_state(eval_result.dict)
-        self.log.info("Evaluation completed. The result is as below.\n"+eval_result.__repr__())
-
-        return eval_result
+        if gt is not None:
+            if res.shape == gt.shape:
+                eval_result = self.compute(res, gt)
+                #self.log.log_state(eval_result)
+                self.log.info("Evaluation completed. The result is as below.\n"+eval_result.__repr__())
+                return eval_result
+            else:
+                raise ValueError(f"Shapes of Predictions are different from ground truth. {res.shape}, {gt.shape}")

@@ -87,7 +87,7 @@ class TorchTrainer(TorchPredictor, Trainer):
         torch.backends.cudnn.benchmark = False
         np.random.seed(seed)
         random.seed(seed)
-        self.log.info(f"Random seed set:{seed}")
+        self.log.debug(f"Random seed set:{seed}")
 
     def get_rand_state(self) -> dict:
         return {
@@ -109,7 +109,7 @@ class TorchTrainer(TorchPredictor, Trainer):
         torch.backends.cudnn.benchmark = False
         np.random.set_state(state['numpy'])
         random.setstate(state['random'])
-        self.log.info(f"Random state set.")
+        self.log.debug(f"Random state set.")
 
     def load_state(self, path:str) -> None:
         resumed = torch.load(path)
@@ -120,7 +120,7 @@ class TorchTrainer(TorchPredictor, Trainer):
         self.batch_size = resumed['batch_size']
         self.max_step = resumed['maxstep']
         self.conf.env = resumed['env']
-        self.log.info("Random state loaded.")
+        self.log.debug("Random state loaded.")
 
     def _save_model(self, timestep:int=None) -> None:
         if not self.hc:
@@ -176,6 +176,9 @@ class TorchTrainer(TorchPredictor, Trainer):
 
             if self.conf.unit == 'step':
                 current_step = self.conf.init_step
+            
+            self.log.info("Training state resumed.")
+
 
         with logging_redirect_tqdm():
             for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), initial=self.conf.init_step, total=self.conf.max_step, desc='Epoch', unit='epoch', position=position, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
@@ -184,7 +187,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                 avg_loss = whole_batch = 0
                 for batch in (step_bar:=tqdm(self.loader if self.conf.unit == 'epoch' else range(self.conf.init_step, self.conf.max_step), desc='Steps', unit='step', position=position+1, leave=False, disable=silent)):
                     saved = False
-                    batch = to_tensor(batch)
+                    batch = to_tensor(batch, dtype=self.conf.dtype, device=device)
                     self.learner.model.train(True)
                     self.learner.opt.zero_grad()
                     # Before step hook
@@ -230,7 +233,9 @@ class TorchTrainer(TorchPredictor, Trainer):
 
                     #Evaluation (step)
                     if self.grader is not None:
-                        self.grader.eval(self.learner, self, self.course.get_dataset('eval'), current_step, 'step', step_check=True, final=False, position=position+2)
+                        _rng_state = self.get_rand_state()
+                        self.grader.eval(learner=self.learner, data=self.course.get_dataset('eval'), timestep=current_step, unit='step', step_check=True, final=False, position=position+2, env_conf=self.conf.env)
+                        self.set_rand_state(_rng_state)
 
                     #Checkpoint (step)
                     if self.conf.unit == 'step':
@@ -261,6 +266,12 @@ class TorchTrainer(TorchPredictor, Trainer):
                         if not dist.is_initialized() or dist.get_rank() == 0:
                             self._save_checkpoint(epoch+1, 'epoch')
                             saved = True
+
+                #Evaluation (epoch)
+                if self.grader is not None:
+                    _rng_state = self.get_rand_state()
+                    self.grader.eval(learner=self.learner, data=self.course.get_dataset('eval'), timestep=epoch+1, unit='epoch', step_check=True, final=False, position=position+2, env_conf=self.conf.env)
+                    self.set_rand_state(_rng_state)
 
         if dist.is_initialized():
             self.learner.opt.consolidate_state_dict()

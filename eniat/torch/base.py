@@ -18,13 +18,12 @@ import numpy as np
 import os
 import warnings
 
-def to_tensor(batch):
+def to_tensor(batch, dtype:str=None, device=None):
     if isinstance(batch, list):
         for data in batch:
-            if isinstance(data, np.ndarray):
-                data = torch.from_numpy(data)
-    elif isinstance(batch, np.ndarray):
-        batch = torch.from_numpy(data)
+            data = torch.as_tensor(data, dtype=getattr(torch, dtype) if dtype else torch.float32, device=device)
+    else:
+        batch = torch.as_tensor(batch, dtype=getattr(torch, dtype) if dtype else torch.float32, device=device)
     return batch
 
 def distributed (fn:Callable) -> Callable:
@@ -66,7 +65,7 @@ class TorchPredictor():
             dataset = self.course.get_dataset(data_label)
         if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
             return DataLoader(dataset, batch_size=self.conf.batch_size, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory) if not dist.is_initialized() else \
-            DataLoader(dataset, batch_size=self.conf.batch_size, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory, sampler=DistributedSampler(dataset, self.conf.env.world_size, self.conf.env.global_rank))
+            DataLoader(dataset, batch_size=self.conf.batch_size, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory, sampler=DistributedSampler(dataset, num_replicas=self.conf.env.world_size, rank=self.conf.env.global_rank))
         else:
             return DataLoader( dataset, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory)
 
@@ -145,39 +144,50 @@ class TorchPredictor():
 
         ret = []
         gt = []
+        y = None
         with logging_redirect_tqdm():
             for batch in (step_bar:=tqdm(self.loader, desc='Inference', unit='step', position=position, leave=False, disable=silent)):
+                batch = to_tensor(batch, self.conf.dtype, device)
                 if isinstance(batch, list):
-                    gt.append(batch[1].cpu())
-                    batch = to_tensor(batch[0])
-                batch = self.to_tensor(batch)
+                    y = batch[1].cpu()
+                    batch = batch[0]
                 self.learner.to(device)
                 self.learner.eval()
                 with torch.no_grad():
                     if self.conf.precision is None:
-                        pred = self.learner.predict(batch).detach().cpu()
+                        pred = self.learner.predict(batch, device, self.log)
                     else:
                         with torch.autocast(torch.device(device), dtype=getattr(torch, self.conf.precision)):
-                            pred = self.learner.predict(batch)
-                        pred = pred.detach().cpu()
+                            pred = self.learner.predict(batch, device, self.log)
 
-                if dist.is_initialized() and dist.get_rank() == 0:
-                    gathered = torch.zeros((dist.get_world_size() * pred[0], *pred.shape[1:]))
-                    dist.all_gather_into_tensor(gathered, pred)
-                    ret.append(gathered)
-                else:
-                    ret.append(pred)
+                if dist.is_initialized():
+                    if dist.get_rank() == 0:
+                        gathered = [torch.zeros_like(pred) for _ in range(dist.get_world_size())]
+                        dist.gather(pred, gathered)
+                        ret.append(torch.cat(gathered).cpu())
+                        dist.barrier()
+                        if y is not None:
+                            gathered = [torch.zeros_like(y) for _ in range(dist.get_world_size())]
+                            dist.gather(y, gathered)
+                            gt.append(torch.cat(gathered).cpu())
+                            dist.barrier()
+                    else:
+                        dist.gather(pred)
+                        dist.barrier()
+                        if y is not None:
+                            dist.gather(y)
+                            dist.barrier()
 
-        if dist.is_initialized() and dist.get_rank():
-            dist.destroy_process_group()
-            return
-        
-        ret = torch.cat(ret).numpy()
-        if gt:
-            gt = torch.cat(gt).numpy()
+        if not dist.is_initialized() or dist.get_rank() == 0:
+            ret = torch.cat(ret).squeeze().numpy()
+            if len(gt):
+                gt = torch.cat(gt).squeeze().numpy()
+            else:
+                gt = None
         else:
-            gt = None
+            ret = gt = None
 
         if dist.is_initialized() and final:
             dist.destroy_process_group()
-        return ret if gt is None else (ret, gt)
+
+        return (ret, gt)
