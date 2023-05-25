@@ -81,10 +81,9 @@ def eniat(cfg: DictConfig) -> None:
 
             if cfg.task == "fit" or cfg.task == "train":
                 trainer.fit()
-            elif cfg.task == "fit_n_eval" or cfg.task == "train_n_test":
-                trainer.fit()
             elif cfg.task == "eval" or cfg.task == "test":
-                trainer.eval()
+                learner = load_learner()
+                grader.eval()
             elif cfg.task == "predict" or cfg.task == "infer":
                 trainer.predict()
             else:

@@ -48,13 +48,16 @@ class StateLogger():
         def __exit__(self, exc_type, exc_val, exc_tb):
             StateLogger._silent = self.prev_silent
 
-    def __init__(self, name: str, level = 0, conf:DictConfig = None) -> None:
+    def __init__(self, name: str, level = 0, conf:DictConfig = None, resume_path:str=None) -> None:
         self.conf = conf
         self.console = logging.getLogger(name)
         self.console.setLevel(level)
         self.unit = conf.unit
         self.interval = conf.interval
-        self.state = []
+        self.state = {}
+        if resume_path is not None:
+            _ext=resume_path.split('.')[-1]
+            
 
     def _stepfilter(fn:Callable) -> Callable:
         def wrapper(self, data:dict, force:bool=False):
@@ -126,7 +129,7 @@ class StateLogger():
         return self.console.exception(msg, *args, **kwargs) if not self._silent else None 
 
     @_stepfilter
-    def log_state(self, data:dict, json:bool=True):
+    def log_state(self, data:dict, json:bool=False, csv:bool=False, xls:bool=False):
         self.state.append(data)
         log = json.dumps(self.state, ensure_ascii=False, indent=2)
         if json:
