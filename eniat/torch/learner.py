@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.nn import Module
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.nn import DataParallel as DP
 from torch.optim import Optimizer
 from hydra.utils import instantiate
 from ..utils.conf import conf_instantiate, _dynamic_import
@@ -14,7 +16,7 @@ import os
 T_co = TypeVar('T_co', covariant=True)
 O = TypeVar('O', bound=Optimizer)
 
-def load_learner (conf, log, resume_model:bool=False, resume_opt:bool=False, resume_dir:str = None, resume_step:int=None):
+def load_learner (conf, log, resume_model:bool=False, resume_opt:bool=False, resume_dir:str = None, resume_step:int=None, dist_type:Literal['single', 'DP', 'DDP', 'torchrun']):
     # Model Load
     model = conf_instantiate(conf.model)
     log.info("Model loaded...")
@@ -23,6 +25,10 @@ def load_learner (conf, log, resume_model:bool=False, resume_opt:bool=False, res
     if not resume_model:
         log.warning("'resume_model' is set to False. The model will be initialized without loading a checkpoint.")
     else:
+        if dist_type == 'DP':
+            model = DP(model)
+        elif dist_type == 'DDP' or dist_type == 'torchrun':
+            model = DDP(model)
         model.load_state_dict(torch.load(model_resume_path:=(os.path.join(resume_dir, f'model_{resume_step}.cpt'))))
         log.info(f"Weights are resumed from {model_resume_path}.")
     # loss

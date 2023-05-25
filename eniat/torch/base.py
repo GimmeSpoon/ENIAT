@@ -114,7 +114,6 @@ class TorchPredictor():
             dist_opt:str=None
             ):
         
-        print(self, device, data_label, compile, learner_cfg)
         # data
         if data_cfg is not None and data_label is not None:
             self.course = get_course_instance(data_cfg, log)
@@ -122,7 +121,7 @@ class TorchPredictor():
 
         # learner
         if learner_cfg is not None:
-            self.learner, state = load_learner(learner_cfg, log, resume_model, resume_opt, resume_dir, resume_step)
+            self.learner, state = load_learner(learner_cfg, log, resume_model, resume_opt, resume_dir, resume_step, self.conf.env.type)
             model = self.learner.model
 
             if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
