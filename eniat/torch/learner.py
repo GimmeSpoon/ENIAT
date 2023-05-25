@@ -58,7 +58,7 @@ def load_learner (conf, log, resume_model:bool=False, resume_opt:bool=False, res
     if learner:
         log.info("Learner instance created.")
 
-    return learner, None if not resume_opt else learner, ret_state
+    return learner, ret_state
 
 class TorchLearner(Learner, Generic[T_co]):
     def __init__(self, model:Module, criterion=None, optimizer=None, scheduler=None) -> None:
