@@ -162,7 +162,7 @@ class TorchTrainer(TorchPredictor, Trainer):
     @distributed
     def fit(self, device:int=0, global_rank:int=0, silent:bool=False, position:int=0, data_label:str='fit'):
         
-        resumed = self.prepare(device, data_label, self.conf.accel, self.learner_conf, self.data_conf, self.log, dist_opt=self.conf.env.optimizer, resume_model=self.conf.resume_model, resume_opt=self.conf.resume_opt, resume_dir=self.conf.resume_dir, resume_step=self.conf.resume_step)
+        resumed = self.prepare(device=device, data_label=data_label, compile=self.conf.accel, learner_cfg=self.learner_conf, data_cfg=self.data_conf, log=self.log, dist_opt=self.conf.env.optimizer, resume_model=self.conf.resume_model, resume_opt=self.conf.resume_opt, resume_dir=self.conf.resume_dir, resume_step=self.conf.resume_step)
 
         current_step = 0
         saved = False
