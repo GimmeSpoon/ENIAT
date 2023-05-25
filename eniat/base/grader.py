@@ -91,6 +91,9 @@ class Grader():
         else:
             self.methods = []
 
+    def is_enabled(self) -> bool:
+        return len(self.methods) > 0
+
     def compute(self, prediction:T_co, ground_truth:T_co, options:list[dict]=None) -> dict:
         result = {}
         if options is None:

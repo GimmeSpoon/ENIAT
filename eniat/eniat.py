@@ -77,7 +77,7 @@ def eniat(cfg: DictConfig) -> None:
         # Torch
         if cfg.type == "torch":
 
-            trainer = torchload(cfg, log)
+            trainer, grader = torchload(cfg, log)
 
             if cfg.task == "fit" or cfg.task == "train":
                 trainer.fit()

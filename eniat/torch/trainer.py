@@ -30,12 +30,12 @@ def torchload(cfg:DictConfig, log:L):
 
     grader = TorchGrader(cfg.grader, logger=log)
     # instantiate trainer
-    trainer = TorchTrainer(cfg.trainer, cfg.learner, cfg.data, log=log)
+    trainer = TorchTrainer(cfg.trainer, cfg.learner, cfg.data, log=log, grader=grader if grader.is_enabled() else None)
 
     if trainer:
         log.info("Trainer instance created.")
     
-    return trainer
+    return trainer, grader
 
 class TorchTrainer(TorchPredictor, Trainer):
     r"""PyTorch compatible trainer class.
@@ -160,7 +160,7 @@ class TorchTrainer(TorchPredictor, Trainer):
             fn(*args)
 
     @distributed
-    def fit(self, device:int=0, global_rank:int=0, silent:bool=False, position:int=0, data_label:str='fit'):
+    def fit(self, device:int=0, global_rank:int=0, silent:bool=False, position:int=0, final:bool=True, data_label:str='fit'):
         
         resumed = self.prepare(device=device, data_label=data_label, compile=self.conf.accel, learner_cfg=self.learner_conf, data_cfg=self.data_conf, log=self.log, dist_opt=self.conf.env.optimizer, resume_model=self.conf.resume_model, resume_opt=self.conf.resume_opt, resume_dir=self.conf.resume_dir, resume_step=self.conf.resume_step)
 
@@ -268,5 +268,5 @@ class TorchTrainer(TorchPredictor, Trainer):
         if not saved and (not dist.is_initialized() or dist.get_rank() == 0):
             self._save_checkpoint(self.conf.max_step, self.conf.unit)
 
-        if dist.is_initialized():
+        if dist.is_initialized() and final:
             dist.destroy_process_group()
