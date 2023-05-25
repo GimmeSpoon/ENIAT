@@ -70,12 +70,12 @@ class TorchTrainer(TorchPredictor, Trainer):
             'f': [], 'b': [], 'bs': [], 'as': [], 'be': [],'ae': []
         }
 
-        if 'seed' in conf and conf['seed']:
+        if conf.seed and not conf.resume_opt:
             self.rand_all(conf.seed)
-        else:
-            self.log.warning("Random seed is not set in the configuration. If there's no resumed state, random behaviors can not be controlled.")
-            self.seed = random.random()
-            self.rand_all(self.seed)
+        elif not conf.seed:
+                self.log.warning("Random seed is not set in the configuration. If there's no resumed state, random behaviors can not be controlled.")
+                self.seed = random.random()
+                self.rand_all(self.seed)
 
     def rand_all(self, seed) -> None:
         if self.conf.env.type != 'single':

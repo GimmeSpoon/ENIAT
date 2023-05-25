@@ -121,7 +121,7 @@ class TorchPredictor():
 
         # learner
         if learner_cfg is not None:
-            self.learner, state = load_learner(learner_cfg, log, resume_model, resume_opt, resume_dir, resume_step, self.conf.env.type)
+            self.learner, state = load_learner(learner_cfg, log, self.conf.env.type, resume_model, resume_opt, resume_dir, resume_step)
             model = self.learner.model
 
             if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
