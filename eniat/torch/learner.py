@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Union
+from typing import TypeVar, Generic, Union, Literal
 from abc import abstractmethod
 from ..base import Learner
 import torch
@@ -16,7 +16,7 @@ import os
 T_co = TypeVar('T_co', covariant=True)
 O = TypeVar('O', bound=Optimizer)
 
-def load_learner (conf, log, resume_model:bool=False, resume_opt:bool=False, resume_dir:str = None, resume_step:int=None, dist_type:Literal['single', 'DP', 'DDP', 'torchrun']):
+def load_learner (conf, log, dist_type:Literal['single', 'DP', 'DDP', 'torchrun']=None, resume_model:bool=False, resume_opt:bool=False, resume_dir:str = None, resume_step:int=None):
     # Model Load
     model = conf_instantiate(conf.model)
     log.info("Model loaded...")
