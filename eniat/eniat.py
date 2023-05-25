@@ -30,14 +30,8 @@ class Manager():
         try:
             if self.cfg.type == "torch":
                 self.log.info(f"Initiating an experiment based on PyTorch.")
-                trainer = getattr(import_module('.torch', 'eniat'), 'TorchDistributedTrainer')(conf=self.cfg.trainer, data_conf=self.cfg.data, learner_conf=self.cfg.learner, logger_conf=self.cfg.logger)
-                if self.cfg.trainer.distributed.type == "none" or self.cfg.trainer.distributed.type == "DP":
-                    _courses = get_course_instance(self.cfg.data, self.log)
-                    self.log.info('Loaded dataset.\n' + _courses.__repr__())
-                    learner, trainer = torchload(self.cfg, self.log)
-                else:
-                    
-                    self.log.info("Distributed Learning (Torch) is configured.")
+                grader = getattr(import_module('.torch', 'eniat'), 'TorchGrader')(conf=cfg.grader, logger=self.log)
+                trainer = getattr(import_module('.torch', 'eniat'), 'TorchTrainer')(conf=self.cfg.trainer, data_conf=self.cfg.data, learner_conf=self.cfg.learner, logger_conf=self.cfg.logger)
 
             if self.cfg.type == "scikit":
 

@@ -28,8 +28,7 @@ def torchload(cfg:DictConfig, log:L):
 
     log.info(f"Initiating an experiment based on PyTorch.")
 
-    grader = TorchGrader(cfg.grader)
-
+    grader = TorchGrader(cfg.grader, logger=log)
     # instantiate trainer
     trainer = TorchTrainer(cfg.trainer, cfg.learner, cfg.data, log=log)
 
