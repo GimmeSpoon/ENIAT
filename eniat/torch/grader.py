@@ -59,8 +59,10 @@ class TorchGrader (Grader, TorchPredictor):
         if gt is not None:
             if res.shape == gt.shape:
                 eval_result = self.compute(res, gt)
-                #self.log.log_state(eval_result)
-                self.log.info("Evaluation completed. The result is as below.\n"+eval_result.__repr__())
+                eval_result = {k:float(v) for k, v in eval_result.items()}
+                eval_result[unit] = timestep
+                self.log.log_state(eval_result)
+                self.log.info("Evaluation completed.")
                 return eval_result
             else:
                 raise ValueError(f"Shapes of Predictions are different from ground truth. {res.shape}, {gt.shape}")

@@ -4,8 +4,9 @@ from typing import Callable, Literal
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
 import json
-
-
+import csv
+import openpyxl
+from openpyxl import Workbook
 
 class DummyLogger():
     r"""This class is for debugging. You can ignore this."""
@@ -54,25 +55,10 @@ class StateLogger():
         self.console.setLevel(level)
         self.unit = conf.unit
         self.interval = conf.interval
-        self.state = {}
+        self.e_state = {}
+        self.s_state = {}
         if resume_path is not None:
             _ext=resume_path.split('.')[-1]
-            
-
-    def _stepfilter(fn:Callable) -> Callable:
-        def wrapper(self, data:dict, force:bool=False):
-            if 'epoch' in data:
-                timestep = data['epoch']
-                unit = 'epoch'
-            elif 'step' in data:
-                timestep = data['step']
-                unit = 'step'
-            else:
-                raise ValueError("Dict 'data' must contain timestep variable when logging states.")
-            if not force and (self.unit != unit or timestep % self.interval):
-                return
-            return fn(data)
-        return wrapper
 
     def setLevel(self, level):
         return self.console.setLevel(level)
@@ -128,16 +114,25 @@ class StateLogger():
     def exception(self, msg, *args, **kwargs):
         return self.console.exception(msg, *args, **kwargs) if not self._silent else None 
 
-    @_stepfilter
-    def log_state(self, data:dict, json:bool=False, csv:bool=False, xls:bool=False):
-        self.state.append(data)
-        log = json.dumps(self.state, ensure_ascii=False, indent=2)
-        if json:
-            Path()
-        if self.conf.file_log:
-            with open(Path(self.conf.log.dir).joinpath('state', "a+")) as f:
-                f.write(log)
-        self.console.info(log)
+    def log_state(self, data:dict, to_json:bool=None, to_xls:bool=None):
+        
+        if 'epoch' in data:
+            step = data['epoch']
+            data.pop('epoch', None)
+            self.e_state[step] = data
+        elif 'step' in data:
+            step = data['step']
+            data.pop('step', None)
+            self.s_state[step] = data
+        else:
+            raise ValueError("Data given to 'log_state' must have timestep attribute.")
+        
+        log = json.dumps(data, ensure_ascii=False, indent=2)
+        if to_json if to_json is not None else self.conf.to_json:
+            json.dump({'epoch':self.e_state, 'step':self.s_state}, open('./chekcpoints/state.json'))
+        if to_xls if to_xls is not None else self.conf.to_xls:
+            raise NotImplementedError("sorry. xls is not supported yet.")
+        self.console.info("Current training state\n" + log)
 
 class TBoardLogger(StateLogger):
 

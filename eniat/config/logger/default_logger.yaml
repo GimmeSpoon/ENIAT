@@ -2,6 +2,8 @@ type: StateLogger
 level: 0
 unit: none
 interval: 0
+to_json: False
+to_xls: False
 mlflow:
   enable: False
 tensorboard:

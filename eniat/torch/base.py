@@ -5,6 +5,7 @@ import torch.distributed as dist
 from torch.multiprocessing import spawn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.nn import DataParallel as DP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.optim import PostLocalSGDOptimizer, ZeroRedundancyOptimizer
 import torch.distributed.algorithms.model_averaging.averagers as averagers
 from tqdm.auto import tqdm
@@ -46,7 +47,7 @@ def distributed (fn:Callable) -> Callable:
                 self._torchrun_init(self)
                 return fn(int(os.environ['LOCAL_RANK']), int(os.environ['RANK']), silent, position, final, **(kwargs or {}))
             else:
-                #DDP
+                #DDP or FSDP
                 spawn(self._ddp_init, (fn.__name__, HydraConfig.get(), silent, position, final, *[kwargs[key] for key in kwargs]), nprocs=self.conf.env.local_size, join=True)
         else:
             if dist.get_rank() == 0:
@@ -124,7 +125,10 @@ class TorchPredictor():
             model = self.learner.model
 
             if self.conf.env.type != 'single' and self.conf.env.type != 'DP':
-                model = torch.compile(DDP(model.to(device))) if compile else DDP(model)
+                if self.conf.env.type == 'FSDP':
+                    model = torch.compile(FSDP(model.to(device))) if compile else FSDP(model)
+                else:
+                    model = torch.compile(DDP(model.to(device))) if compile else DDP(model)
                 optim = self.get_dist_opt(dist_opt, self.learner.opt, model.parameters())
                 self.learner.opt = optim
             else:
