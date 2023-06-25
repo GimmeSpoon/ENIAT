@@ -1,6 +1,6 @@
 from typing import TypeVar, Literal, Callable
 from .grader import TorchGrader
-from .base import TorchPredictor, to_tensor, distributed
+from .predictor import TorchPredictor, to_tensor, distributed
 from ..base import Trainer, Warning
 from ..data.course import Course, FullCourse
 from .learner import TorchLearner
@@ -43,6 +43,7 @@ class TorchTrainer(TorchPredictor, Trainer):
     It only occupies one device(GPU)"""
     def __init__(self, conf:DictConfig=None, learner_conf:DictConfig=None, data_conf:DictConfig=None, logger_conf:DictConfig=None, log=None, grader=None) -> None:
 
+        super(TorchTrainer, self).__init__(self.conf.env)
         self.conf = conf
         self.learner_conf = learner_conf
         self.data_conf = data_conf

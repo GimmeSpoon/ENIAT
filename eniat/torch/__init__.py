@@ -1,7 +1,7 @@
 from .learner import TorchLearner, SupremeLearner
 from .trainer import TorchTrainer, torchload, distributed
 from .grader import TorchGrader
-from .base import TorchPredictor, to_tensor
+from .predictor import TorchPredictor, to_tensor
 
 __all__ = [
     'torchload',

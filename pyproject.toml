@@ -20,3 +20,6 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/GimmeSpoon/ENIAT"
 "Bug Tracker" = "https://github.com/GimmeSpoon/ENIAT/issues"
+
+[project.scripts]
+eniat = "eniat.eniat:eniat"

@@ -1,7 +1,7 @@
 from typing import Callable, TypeVar, Union, Literal, Sequence, Any
 from ..base import Grader, Learner
 from ..data import Course
-from .base import TorchPredictor
+from .predictor import TorchPredictor
 import torch
 import torch.distributed as dist
 from omegaconf import DictConfig
