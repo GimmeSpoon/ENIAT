@@ -52,11 +52,8 @@ class StateLogger():
     def __init__(self, name: str, level = 0, conf:DictConfig = None, resume_path:str=None) -> None:
         self.conf = conf
         self.console = logging.getLogger(name)
-        self.console.setLevel(level)
-        self.unit = conf.unit
-        self.interval = conf.interval
-        self.e_state = {}
-        self.s_state = {}
+        self.console.setLevel(conf.level)
+        self.hc = HydraConfig.get()
         if resume_path is not None:
             _ext=resume_path.split('.')[-1]
 
@@ -114,55 +111,129 @@ class StateLogger():
     def exception(self, msg, *args, **kwargs):
         return self.console.exception(msg, *args, **kwargs) if not self._silent else None 
 
-    def log_state(self, data:dict, to_json:bool=None, to_xls:bool=None):
-        
-        if 'epoch' in data:
-            step = data['epoch']
-            data.pop('epoch', None)
-            self.e_state[step] = data
-        elif 'step' in data:
-            step = data['step']
-            data.pop('step', None)
-            self.s_state[step] = data
-        else:
-            raise ValueError("Data given to 'log_state' must have timestep attribute.")
-        
-        log = json.dumps(data, ensure_ascii=False, indent=2)
-        if to_json if to_json is not None else self.conf.to_json:
-            json.dump({'epoch':self.e_state, 'step':self.s_state}, open('./chekcpoints/state.json'))
-        if to_xls if to_xls is not None else self.conf.to_xls:
+    def log_state(self, data:dict, timestep:int, unit:Literal['epoch', 'step'], tag:str=None, to_json:bool=None, to_xls:bool=None, silent:bool=False):
+        if not self.check_loss_policy(data, unit):
+            return
+        if (to_json if to_json is not None else self.conf.json):
+            json.dump({'epoch':self.e_state, 'step':self.s_state}, open(Path.joinpath(Path(self.hc.runtime.output_dir), './chekcpoints/state.json')))
+        if (to_xls if to_xls is not None else self.conf.xls):
             raise NotImplementedError("sorry. xls is not supported yet.")
-        self.console.info("Current training state\n" + log)
+        if not silent:
+            _str = '\n'.join([f"{item[0]} : {item[1]}" for item in data.items()])
+            with logging_redirect_tqdm():
+                self.console.info("Current training state" + _str)
 
-class TBoardLogger(StateLogger):
+class TensorboardLogger(StateLogger):
 
-    def __init__(self, name: str, conf: DictConfig, file_path: str = None) -> None:
-        super().__init__(name, conf, file_path)
-        self.tb = __import__("torch.utils.tensorboard", fromlist=["torch.utils"])
-        self.tb_logger = self.tb.SummaryWriter("tensorboard", conf.logger.logging_dir)
+    def __init__(self, name: str, conf: DictConfig = None, resume_path: str = None) -> None:
+        super().__init__(name, conf, resume_path)
+    
+    def prepare(self) -> None:
+        tb = __import__("torch.utils.tensorboard", fromlist=["SummaryWriter"])
+        self.tb = tb.SummaryWriter(self.conf.logging_dir or Path.joinpath(Path(self.hc.runtime.output_dir), 'tensorboard'))
 
-    def __getattr__(self, __name: str):
-        if __name.startswith('add_'):
-            return getattr(self.tb_logger, __name)
-        return getattr(self.console, __name)
+    def log_state(self, data:dict, timestep:int, unit:Literal['epoch', 'step'], tag:str=None, to_json:bool=None, to_xls:bool=None, silent:bool=False):
+        if not self.check_loss_policy(data, unit):
+            return
+        if len(data) == 1:
+            data = list(data.items())[0]
+            self.log_scalar(data[0], data[1], timestep, silent=silent)
+        elif len(data) > 1:
+            self.log_scalars(data, timestep, tag, silent=silent)
 
-class MFlowLogger(StateLogger):
+        super().log_state(data, timestep, unit, tag, to_json, to_xls, silent=True)
+        
+    def log_scalar(self, key:str, value, step:int, silent:bool=False):
+        self.tb.add_scalar(key, value, step)
+        if not silent:
+            with logging_redirect_tqdm():
+                self.console.info("Current state logged\n" + key + ": " + str(value))
 
-    def __init__(self, name: str, conf: DictConfig, file_path: str = None, uri:str='localhost') -> None:
-        super().__init__(name, conf, file_path)
+    def log_scalars(self, key_value:dict, step:int, tag:str=None, silent:bool=False):
+        self.tb.add_scalars(tag, key_value, step)
+        if not silent:
+            with logging_redirect_tqdm():
+                self.console.info("Current state logged\n"+(f"{key} : {value}\n" for key, value in key_value.items()))
 
-        self.mf_logger = __import__("mlflow")
-        self.mf_logger.set_tracking_uri(uri)
-        if autolog:
-            self.mf_logger.autolog(**autolog_options)
+    def log_image(self, image, tag:str=None, step:int=None, format:str=None, filepath:str=None, silent:bool=False):
+        self.tb.add_image(tag, image, step, format)
+        if not silent:
+            self.console.info(f"Logged an image to tensorboard")
+    
+    def log_figure(self, figure, tag:str=None, step:int=None, close:bool=None, filepath:str=None, silent:bool=False):
+        self.tb.add_figure(tag, figure, step, close)
+        if not silent:
+            self.console.info(f"Logged a figure to tensorboard")
+
+class MLFlowLogger(StateLogger):
+
+    def __init__(
+            self,
+            name: str,
+            conf: DictConfig = None,
+            resume_path = None,
+            ) -> None:
+        super().__init__(name, conf, resume_path)
+
+    def prepare(self, ) -> None:
+        
+        self.uri = self.conf.mlflow.uri
+        self.mf = __import__('mlflow')
+        self.mf.set_tracking_uri(self.uri)
+
+        if self.conf.mlflow.autolog:
+            # Refer to autolog reference and fix here
+            self.mf.autolog()    
+        elif self.conf.mlflow.run_id is not None:
+            self.current_run = self.mf.start_run(self.conf.mlflow.run_id, ru_name=self.conf.mlflow.run_name)
         else:
-            
-            if experiment_id:
-                self.mf_logger.set_experiment(experiment_id=experiment_id)
+            if self.conf.mlflow.exp_id is not None:
+                self.experiment = self.mf.set_experiment(experiment_id=self.conf.mlflow.exp_id)
             else:
-                self.mf_logger.set_experiment(experiment_name=experiment_name)
+                self.experiment = self.mf.set_experiment(experiment_name=self.conf.mlflow.exp_name)
+            self.current_run = self.mf.start_run(experiment_id=self.conf.mlflow.exp_id)
 
-            self.mf_logger.start_run(run_id)
+    def __del__ (self) -> None:
+
+        if not 'mf' in self.__dict__:
+            return
+        
+        if self.mf is not None and self.mf.active_run() is not None:
+            self.mf.end_run()
+
+    def log_scalar(self, key:str, value, step:int, silent:bool=False):
+        self.mf.log_metric(key, value, step)
+        if not silent:
+            with logging_redirect_tqdm():
+                self.console.info("Current state logged\n" + key + ": " + str(value))
+
+    def log_scalars(self, key_value:dict, step:int, tag:str=None, silent:bool=False):
+        self.mf.log_metrics(key_value, step)
+        if not silent:
+            with logging_redirect_tqdm():
+                self.console.info("Current state logged\n"+(f"{key} : {value}\n" for key, value in key_value.items()))
+
+    def log_image(self, image, tag:str=None, step:int=None, format:str=None, filepath:str=None, silent:bool=False):
+        self.mf.log_image(image, filepath)
+        if not silent:
+            self.console.info(f"Logged an image to {self.mf.get_tracking_uri()}")
+    
+    def log_figure(self, figure, tag:str=None, step:int=None, close:bool=None, filepath:str=None, silent:bool=False):
+        self.mf.log_figure(figure, filepath)
+        if not silent:
+            self.console.info(f"Logged a figure to {self.mf.get_tracking_uri()}")
+
+    def log_state(self, data:dict, timestep:int, unit:Literal['epoch', 'step'], tag:str=None, to_json:bool=None, to_xls:bool=None, silent:bool=False):
+
+        if not self.check_loss_policy(data, unit):
+            return
+        if len(data) == 1:
+            data = list(data.items())[0]
+            self.log_scalar(data[0], data[1], timestep, silent=silent)
+        elif len(data) > 1:
+            self.log_scalars(data, timestep, tag, silent=silent)
+
+        super().log_state(data, timestep, unit, tag, to_json, to_xls, True)
 
 class TotalLogger(StateLogger):
 

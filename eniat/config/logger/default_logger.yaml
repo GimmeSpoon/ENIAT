@@ -1,10 +1,10 @@
+defaults:
+  - mlflow: default_mlflow
+  - tensorboard: default_tensorboard
+
+logging_dir: 
 type: StateLogger
 level: 0
-unit: none
-interval: 0
-to_json: False
-to_xls: False
-mlflow:
-  enable: False
-tensorboard:
-  enable: False
+training_loss: none
+json: False
+xls: False

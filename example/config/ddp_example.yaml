@@ -11,10 +11,11 @@ type: torch
 logger:
   type: StateLogger
   level: 10
+  training_loss: epoch
   json: False
   xls: False
   mlflow:
-    enable: True
+    exp_name: testrun
     uri:
   tensorboard:
     enable: True
@@ -47,13 +48,20 @@ grader:
     backend: gloo
 
 trainer:
-  seed: 666
-  batch_size: 1000
-  max_step: 100
-  unit: epoch
-  save_interval: 1
-  save_after_eval: True
-  accel: True
+
+  scheme:
+    seed: 666
+    max_step: 100
+    unit: epoch
+    save_interval: 10
+    save_after_eval: False
+    compile: False
+
+  loader:
+    shuffle: False
+    batch_size: 1000
+    pin_memory: False
+    num_workers: 0
 
   env:
      type: DDP

@@ -167,8 +167,10 @@ class TorchTrainer(TorchPredictor, Trainer):
 
         current_step = 0
         saved = False
-        avg_loss = None
+        
         loss = None
+        s_loss = torch.zeros(2, device=device, requires_grad=False)
+        e_loss = torch.zeros(2, device=device, requires_grad=False)
 
         if resumed:
             self.set_rand_state(resumed['rng_state'])
@@ -182,11 +184,8 @@ class TorchTrainer(TorchPredictor, Trainer):
 
 
         with logging_redirect_tqdm():
-            for epoch in (epoch_bar:=tqdm(range(self.conf.init_step, self.conf.max_step if self.conf.unit == 'epoch' else 1), initial=self.conf.init_step, total=self.conf.max_step, desc='Epoch', unit='epoch', position=position, leave=False, disable=True if self.conf.unit != 'epoch' else silent)):
-                # Before epoch hook
-                self._take_hook('be', epoch+1, avg_loss, self.learner)
-                avg_loss = whole_batch = 0
-                for batch in (step_bar:=tqdm(self.loader if self.conf.unit == 'epoch' else range(self.conf.init_step, self.conf.max_step), desc='Steps', unit='step', position=position+1, leave=False, disable=silent)):
+            for epoch in (epoch_bar:=tqdm(range(self.conf.scheme.init_step, self.conf.scheme.max_step if self.conf.scheme.unit == 'epoch' else 1), initial=self.conf.scheme.init_step, total=self.conf.scheme.max_step, desc='Epoch', unit='epoch', position=position+1, leave=False, disable=True if self.conf.scheme.unit != 'epoch' else silent)):
+                for batch in (step_bar:=tqdm(self.loader if self.conf.scheme.unit == 'epoch' else range(self.conf.scheme.init_step, self.conf.scheme.max_step), desc='Steps', unit='step', position=position, leave=False, disable=silent)):
                     saved = False
                     batch = to_tensor(batch, dtype=self.conf.dtype, device=device)
                     self.learner.model.train(True)
@@ -222,13 +221,18 @@ class TorchTrainer(TorchPredictor, Trainer):
 
                     self.learner.model.train(False)
 
-                    step_postfix = {'training_loss' : loss.item(), 'step': current_step+1}
-                    self.log.log_state(step_postfix)
-                    step_postfix['training_loss'] = '{:.8f}'.format(step_postfix['training_loss'])
-                    step_bar.set_postfix({'loss':step_postfix['training_loss']})
+                    s_loss[1] = (batch[0].size(dim=0))
+                    s_loss[0] = loss.item() * s_loss[1]
 
-                    avg_loss += loss.item() * (_cbs:=batch[0].size(dim=0))
-                    whole_batch += _cbs
+                    e_loss[0] += s_loss[0]
+                    e_loss[1] += s_loss[1]
+
+                    if dist.is_initialized():
+                        dist.reduce(s_loss, 0, dist.ReduceOp.SUM)
+
+                    if not dist.is_initialized() or dist.get_rank() == 0:
+                        self.log.log_state({'training_loss (step)' : (s_loss[0] / s_loss[1]).item()}, current_step, 'step', 'Training Loss (Step)')
+                    step_bar.set_postfix({'loss (step)':f'{s_loss[0] / s_loss[1]:.8f}'})
 
                     current_step += 1
 
@@ -251,13 +255,14 @@ class TorchTrainer(TorchPredictor, Trainer):
                 if self.learner.sch:
                     self.learner.sch.step()
 
-                epoch_postfix = {'avg_loss' : avg_loss / whole_batch, 'step': epoch+1}
-                self.log.log_state(epoch_postfix)
-                epoch_postfix['avg_loss'] = '{:.8f}'.format(epoch_postfix['avg_loss'])
-                epoch_bar.set_postfix({'avg_loss':epoch_postfix['avg_loss']})
+                if dist.is_initialized():
+                        dist.reduce(e_loss, 0, dist.ReduceOp.SUM)
 
-                # After epoch hook
-                self._take_hook('ae', epoch+1, avg_loss, self.learner, self)
+                if not dist.is_initialized() or dist.get_rank() == 0:
+                    self.log.log_state({'training_loss (epoch)' : e_loss[0] / e_loss[1]}, epoch, 'epoch', 'Training Loss (Epoch)')
+                epoch_bar.set_postfix({'loss (epoch)': f'{e_loss[0] / e_loss[1]:.8f}'})
+
+                e_loss[0] = e_loss[1] = 0
 
                 if self.conf.unit == 'epoch':
                     self.log.info(f"Epoch {epoch+1} finished")
