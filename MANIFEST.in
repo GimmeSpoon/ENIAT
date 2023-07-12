@@ -1,1 +1,2 @@
-recursive-include config *.yaml
+recursive-include eniat/config *.yaml
+recursive-exclude eniat/config/eniat.egg-info *
