@@ -1,5 +1,7 @@
 #  ENIAT
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-azure.svg)](https://opensource.org/licenses/MIT)
+
 Eniat is a Python template for various ML packages such as PyTorch or Scikit-learn
 
 It provides several convenient features
@@ -11,7 +13,6 @@ It provides several convenient features
 * some remote features: logging, evaluation, etc. (<strong>in progress</strong>)
 
 ## Quick Start
-___
 ### 1. CLI execution
 
 Install eniat with below command.
@@ -38,9 +39,9 @@ Detailed modification of you config files is required for better configuration. 
 
 ### 2. Custom code execution
 
-eniat is designed for various environments. from just `.py` codes to jupyter notebooks.
+eniat is designed for various environments from mere `.py` codes to jupyter notebooks.
 
-You would have to use [Compose API](https://hydra.cc/docs/advanced/compose_api/) for hydra config integration with your Jupyter notebook.
+You would have to use [Compose API](https://hydra.cc/docs/advanced/compose_api/) for hydra config integration with the Jupyter notebook.
 
 The most basic component of eniat is `Trainer`. It is in charge of any training task. In the other hand, `Grader` only evaluates predictions or your model. Below is an example of PyTorch training wih eniat.
 

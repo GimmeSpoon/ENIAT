@@ -1,4 +1,7 @@
-working_dir: ${hydra.runtime.output_dir}
+defaults:
+  - scheme: default_scheme
+  - loader: default_loader
+  - env: default_env
 
 resume_model: False
 resume_opt: False
@@ -10,28 +13,9 @@ accel: False # PyTorch 2.0 compile
 precision:
 dtype:
 gradient_scale: False
-batch_size:
-loader:
-  shuffle: False
-  num_workers: 0
-  pin_memory: False
 
 init_step: 0
 max_step: 0
 unit: epoch # ['epoch', 'step']
 save_interval: 0
 save_after_eval: True
-
-env:
-  type: single
-  debug: False
-  dev_id: 0
-  local_rank: 0
-  global_rank: 0
-  local_size: 1
-  world_size: 1
-  init_method: 'env://'
-  master_address: 'localhost'
-  maste_port: 8888
-  backend:
-  optimizer: zero # ['zero', 'postlocal']

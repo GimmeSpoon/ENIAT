@@ -1,5 +1,4 @@
-name: 'default'
-path:
-resume: False
-resume_path:
-model:
+defaults:
+  - model: default_model
+cls:
+name:

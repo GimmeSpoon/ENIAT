@@ -24,9 +24,13 @@ class TorchGrader (Grader, TorchPredictor):
             step_check:bool=False,
             final:bool=True,
             position:int = 0,
-            env_conf:DictConfig = None
+            env_conf:DictConfig = None,
+            skip_prepare:bool = False
             ):
             
+        if not skip_prepare:
+            self.prepare()
+
         if step_check:
             if self.conf.unit is None or self.conf.unit == 'none' or self.conf.interval is None or self.conf.interval == 0:
                 raise ValueError("You're trying to evaluate at preconfigured steps but configurations of Grader have no settings for eval strategy.")

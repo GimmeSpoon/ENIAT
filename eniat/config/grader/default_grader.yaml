@@ -1,26 +1,4 @@
-enable: True
-unit: ${trainer.unit}
-interval: ${trainer.save_interval}
-methods: []
-seed:
-accel: False
-precision:
-dtype:
-batch_size:
-loader:
-  shuffle: False
-  num_workers: 0
-  pin_memory: False
-env:
-  type: single
-  debug: False
-  dev_id: 0
-  local_rank: 0
-  global_rank: 0
-  local_size: 1
-  world_size: 1
-  init_method: 'env://'
-  master_address: 'localhost'
-  maste_port: 8888
-  backend:
-  optimizer: zero # ['zero', 'postlocal']
+defaults:
+  - scheme: default_scheme
+  - loader: default_loader
+  - env: default_env

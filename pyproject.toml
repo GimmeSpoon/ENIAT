@@ -5,21 +5,29 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "eniat"
 version = "0.1.0"
+license = {file = "LICENSE"}
 authors = [
     {name = "GimmeSpoon", email="skcjfdnd1996@gmail.com"}
 ]
-description = "Weclome to Los Pollos."
+description = "Hello and Weclome to the Los Pollos Hermanos family. My name is Gustavo but you can call me SUS."
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Framework :: hydra",
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+]
+dependencies = [
+    "hydra-core>=1.3.2",
+    "tqdm",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/GimmeSpoon/ENIAT"
 "Bug Tracker" = "https://github.com/GimmeSpoon/ENIAT/issues"
+"Repository" = "https://github.com/GimmeSpoon/ENIAT"
 
 [project.scripts]
 eniat = "eniat.eniat:eniat"

@@ -3,6 +3,7 @@ from logging import Logger
 from typing import Callable, Literal
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
+from hydra.core.hydra_config import HydraConfig
 import json
 import csv
 import openpyxl

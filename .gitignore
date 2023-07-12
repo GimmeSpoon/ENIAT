@@ -163,3 +163,4 @@ cython_debug/
 test/
 result/
 .vscode
+example/data
