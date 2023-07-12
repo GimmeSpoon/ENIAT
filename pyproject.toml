@@ -31,3 +31,6 @@ dependencies = [
 
 [project.scripts]
 eniat = "eniat.eniat:eniat"
+
+[tool.setuptools.packages.find]
+where = ["config"]
