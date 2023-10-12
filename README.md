@@ -2,7 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-azure.svg)](https://opensource.org/licenses/MIT)
 
-Eniat is a Python template for various ML packages such as PyTorch or Scikit-learn
+Eniat is a Python template for various ML packages including PyTorch or Scikit-learn.
+
+Currently supports only PyTorch
 
 It provides several convenient features
 
@@ -32,7 +34,7 @@ For training or whatever task you want, just type command in the hydra style.
 You should have some knowledges about hydra configuration. Below command will initiate training based on a config file located in `./config` and named `basic.yaml`.
 
 ```
-eniat -cd=./config -cn=basic task=train
+eniat -c=PATH_TO_CONFIG_FILE
 ```
 
 Detailed modification of you config files is required for better configuration. I recommend to refer hydra [documentation](https://hydra.cc/docs/intro/) if you're not familiar with it.
@@ -41,9 +43,7 @@ Detailed modification of you config files is required for better configuration. 
 
 eniat is designed for various environments from mere `.py` codes to jupyter notebooks.
 
-You would have to use [Compose API](https://hydra.cc/docs/advanced/compose_api/) for hydra config integration with the Jupyter notebook.
-
-The most basic component of eniat is `Trainer`. It is in charge of any training task. In the other hand, `Grader` only evaluates predictions or your model. Below is an example of PyTorch training wih eniat.
+The most fundamental component of eniat is `Trainer`. It is in charge of training your models. In the other hand, `Grader` only evaluates your model. Below is an example code of PyTorch training wih eniat.
 
 ```python
 from eniat.utils.statelogger import StateLogger
@@ -53,5 +53,5 @@ logger = StateLogger() # Default logger for Eniat
 grader = TorchGrader(grader_cfg, logger = logger) # If none, train without evaluation
 trainer = TorchTrainer(trainer_cfg, learner_cfg, data_cfg, logger, grader)
 
-trainer.fit(device = 0)
+trainer.fit(device = 0) # training on dev 0
 ```

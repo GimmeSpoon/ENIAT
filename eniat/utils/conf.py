@@ -1,20 +1,56 @@
 from omegaconf import DictConfig, OmegaConf
+from importlib.resources import files
 from importlib.util import spec_from_file_location, module_from_spec
-from hydra import compose, initialize
-from hydra.utils import instantiate
-import pkg_resources
+from importlib import import_module
 import sys
 import os
+from pathlib import Path
 from typing import Union, Sequence
+from omegaconf import OmegaConf
+from copy import deepcopy
+from functools import partial
 
-def init_conf(global_config_path:str, job_name:str="eniat", version_base=None):
-    # Global Config
-    with initialize(version_base=version_base, config_path=global_config_path, job_name=job_name):
-        cfg = compose(config_name="eniat")
-        print(cfg)
-    return cfg
+RESKEYS = (
+    RESKEY_LAMBDA := "ld",
+    RESKEY_EXP := "exp",
+    RESKEY_INST := "ins",
+)
 
-def _dynamic_import(path:str, name:str = None):
+RESOLVERS = {
+    RESKEY_LAMBDA : lambda x: eval(x),
+    RESKEY_EXP : lambda e: lambda x: x ** e,
+    RESKEY_INST : lambda p, c, o: load_class(p, c)(**o)
+}
+
+for reskey in RESKEYS:
+    OmegaConf.register_new_resolver(reskey, RESOLVERS[reskey], replace=True)
+
+def recursive_merge(*configs) -> DictConfig:
+    merged = OmegaConf.create({})
+
+    if len(configs) == 1:
+        for config in configs[0]:
+            merged = OmegaConf.unsafe_merge(merged, config)
+    else:
+        for config in configs:
+            merged = OmegaConf.unsafe_merge(merged, config)
+
+    return merged
+
+def recursive_merge_by_path(*paths) -> DictConfig:
+    if len(paths) == 1:
+        return OmegaConf.load(paths[0])
+    else:
+        configs = [OmegaConf.load(path) for path in paths]
+        return recursive_merge(*configs)
+
+def load_default_conf(path:Union[str, Path]=None) -> DictConfig:
+    if path is not None:
+        return OmegaConf.load(path)
+    else:
+        return OmegaConf.load(files('eniat').joinpath('config/default.yaml'))
+
+def import_by_file(path:Union[str,Path], name:str = None):
     _spec = spec_from_file_location(_bn:=name if name else os.path.basename(path), os.path.abspath(path))
     if not _spec:
         raise FileNotFoundError(f"Can not read from the location : {path}")
@@ -23,33 +59,30 @@ def _dynamic_import(path:str, name:str = None):
     _spec.loader.exec_module(_mod)
     return _mod, _bn
 
-def _dynamic_load(name:str, path:str):
-    _mod, _bn = _dynamic_import(path, name)
-    return getattr(_mod, name)
+def load_class(path:Union[str, Path]=None, _class:str=None):
+    if path is None:
+        if _class is None:
+            raise ValueError("No valid arguments")
+        _cls = _class.split('.')
+        try:
+            return getattr(import_module('.'.join(_cls[:-1])), _cls[-1])
+        except:
+            return getattr(import_module('eniat.' + '.'.join(_cls[:-1]), 'eniat'), _cls[-1])
+    else:
+        return getattr(import_by_file(path)[0], _class)
 
-def conf_instantiate(conf:DictConfig):
+def instantiate(conf:DictConfig, *args, _partial:bool=False, **kwargs):
+    conf = deepcopy(conf)
     if not conf:
         return None
-    if '_target_' in conf and conf['_target_']: #Hydra instance
-        return instantiate(conf)
-    elif 'path' in conf and conf['path']:
-        if 'cls' in conf and conf['cls']: #dynamic load
-            _cls = _dynamic_load(conf.cls, conf.path)
-            options = OmegaConf.to_container(conf)
-            options.pop('_target_', None)
-            options.pop('path', None)
-            options.pop('cls', None)
-            return _cls(**options)
-    raise ValueError(f"Instantiation failed. Current config is not valid: {options}")
-
-def _merge_conf_by_path(conf:DictConfig, paths:Union[str,Sequence[str]]) -> DictConfig:
-
-    if isinstance(paths, str):
-        paths = [paths]
+    try:
+        _cls = load_class(conf.path, conf.cls)
+    except:
+        raise ValueError(f"Instantiation failed. Current config is not valid: {conf}")
     
-    for path in paths:
-        new_cfg = OmegaConf.load(path)
-        #conf = OmegaConf.merge(new_cfg, conf)
-        conf = OmegaConf.merge(conf, new_cfg)
-
-    return conf
+    args = list(args)
+    options = {}
+    if 'options' in conf and conf.options:
+        options = OmegaConf.to_container(conf.options)
+        args += options.pop('__args__', [])
+    return partial(_cls, *args, **options, **kwargs) if _partial else _cls(*args, **options, **kwargs)

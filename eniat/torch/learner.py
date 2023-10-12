@@ -1,74 +1,98 @@
-from typing import TypeVar, Generic, Union, Literal
+from typing import TypeVar, Generic, Union, Literal, Any
 from abc import abstractmethod
-from ..base import Learner
+from ..core import Learner
 import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.nn import Module
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp.wrap import always_wrap_policy, size_based_auto_wrap_policy, lambda_auto_wrap_policy, transformer_auto_wrap_policy, enable_wrap, wrap
 from torch.nn import DataParallel as DP
 from torch.optim import Optimizer
-from hydra.utils import instantiate
-from ..utils.conf import conf_instantiate, _dynamic_import
+from ..utils import instantiate, Logger, load_class
 from importlib import import_module
 import os
+from omegaconf import DictConfig
+import functools
+from pathlib import Path
 
 T_co = TypeVar('T_co', covariant=True)
 O = TypeVar('O', bound=Optimizer)
+L = TypeVar('L', bound=Logger)
 
-def load_learner (conf, log, dist_type:Literal['single', 'DP', 'DDP', 'torchrun']=None, resume_model:bool=False, resume_opt:bool=False, resume_dir:str = None, resume_step:int=None):
+
+def load_learner(learner_conf:DictConfig):
+    return load_class(learner_conf.path, learner_conf.cls)(learner_conf)
+
+def instantiate_learner (
+        conf:DictConfig,
+        log:L=None,
+        _model:Any=None,
+        loss_fn:Any=None,
+        optimizer:Any=None,
+        scheduler:Any=None,
+        as_tuple:bool=False
+        ):
     # Model Load
-    model = conf_instantiate(conf.model)
-    log.info("Model loaded...")
-    ret_state = None
+    if _model is None:
+        model = instantiate(conf.model)
+        if log is not None:
+            log.info("Model loaded...")
+    else:
+        model = _model
 
-    if not resume_model:
-        log.warning("'resume_model' is set to False. The model will be initialized without loading a checkpoint.")
-    else:
-        if dist_type == 'DP':
-            model = DP(model)
-        elif dist_type == 'DDP' or dist_type == 'torchrun':
-            model = DDP(model)
-        model.load_state_dict(torch.load(model_resume_path:=(os.path.join(resume_dir, f'model_{resume_step}.cpt'))))
-        log.info(f"Weights are resumed from {model_resume_path}.")
     # loss
-    loss = instantiate(conf.loss) if conf.loss and conf.loss._target_ else None
+    if loss_fn is None:
+        loss = instantiate(conf.loss)
+    else:
+        loss = loss_fn
     if loss:
-        log.info("Loss function loaded...")
+        if log is not None:
+            log.info("Loss function loaded...")
     else:
-        log.warning("Loss function is not defined. Are you sure you wanted this?")
+        if log is not None:
+            log.warning("Loss function is not configured.")
+        
     # optimizer
-    optim = instantiate(conf.optimizer, params=model.parameters()) if conf.optimizer and conf.optimizer._target_ else None
+    if optimizer is None:
+        optim = instantiate(conf.optimizer, params=model.parameters())
+    else:
+        optim = optimizer
     if optim:
-        log.info("Optimizer loaded...")
+        if log is not None:
+            log.info("Optimizer loaded...")
     else:
-        log.warning("Optimizer is not defined. Are you sure you wanted this?")
-    if not resume_opt:
-        log.warning("'resume_opt' is set to False. Training will be initiated without checkpoints.")
-    else:
-        optim.load_state_dict((ret_state:=(torch.load(opt_resume_path:=(os.path.join(resume_dir, f'state_{resume_step}.cpt')))))['optimizer'])
-        log.info(f"Training states are resume from {opt_resume_path}.")
+        if log is not None:
+            log.warning("Optimizer is not configured.")
+
     # scheduler
-    schlr = None# instantiate(conf.learner.scheduler, lr_lambda=lambda x: x**conf.learner.scheduler.lr_lambda, optimizer=optim) if conf.learner.scheduler and conf.learner.scheduler._target_ else None
-    if schlr:
-        log.info("Scheduler loaded...")
+    if scheduler is None:
+        if conf.scheduler.cls:
+            schlr = instantiate(conf.scheduler, optimizer=optim)
+        else:
+            schlr = None
     else:
-        log.warning("Scheduler is not defined. Edit the configuration if this is not what you wanted.")
+        schlr = scheduler
+
+    if schlr:
+        if log is not None:
+            log.info("Scheduler loaded...")
+    else:
+        if log is not None:
+            log.warning("Scheduler is not configured.")
     
     # instantiate learner
-    if 'path' in conf and conf.path:
-        _mod, _bn = _dynamic_import(conf.path)
-        learner = getattr(_mod, conf.cls)(model, loss, optim, schlr, resume_model, resume_opt, resume_dir)
-    else:
-        learner = getattr(import_module('.torch.learner', 'eniat'), conf.cls)(model, loss, optim, schlr, resume_model, resume_dir)
-    if learner:
+    learner = instantiate(conf, model, loss, optim, schlr)
+    if log is not None:
         log.info("Learner instance created.")
 
-    return learner, ret_state
+    return (model, loss, optim, schlr) if as_tuple else learner
 
 class TorchLearner(Learner, Generic[T_co]):
-    def __init__(self, model:Module, criterion=None, optimizer=None, scheduler=None) -> None:
+    def __init__(self, conf:DictConfig=None, model:Module=None, criterion=None, optimizer=None, scheduler=None) -> None:
         super(TorchLearner).__init__()
+        self.conf = conf
         self.model = model
         self.loss_fn = criterion
         self.opt = optimizer
@@ -82,19 +106,39 @@ class TorchLearner(Learner, Generic[T_co]):
     def predict(self, batch:Tensor, device:int, logger):
         pass
 
-    def load_model(self, state=None, path:str=None) -> None:
+    def load(self, log:L=None) -> None:
+        self.model, self.loss_fn, self.opt, self.sch = instantiate_learner(self.conf, log, as_tuple=True)
+
+    def resume_model(self, state=None, path:Union[str,Path]=None) -> None:
         if state:
             self.model.load_state_dict(state)
         else:
             with open(path, 'rb') as f:
                 self.model.load_state_dict(torch.load(f))
 
-    def load_optimizer(self, state=None, path:str=None) -> None:
+    def resume_optimizer(self, state=None, path:Union[str,Path]=None) -> None:
         if state:
             self.opt.load_state_dict(state)
         else:
             with open(path, 'rb') as f:
                 self.opt.load_state_dict(torch.load(f)['optimizer'])
+
+    def resume(self) -> bool:
+        if self.conf.resume_path:
+            if isinstance(self.conf.resume_path, str):
+                resume_path = Path(self.conf.resume_path)
+            if resume_path.is_file():
+                self.resume_model(path=resume_path)
+            else:
+                raise FileNotFoundError(f"Cannot open the checkpoint: {self.conf.resume_path}")
+        elif self.conf.resume_dir and self.conf.resume_step:
+            if isinstance(self.conf.resume_dir, str):
+                resume_dir = Path(self.conf.resume_dir)
+            if  resume_dir.is_dir() and isinstance(self.conf.resume_step, int):
+                self.resume_model(path=f"{resume_dir.joinpath(f'model_{self.conf.resume_step}.cpt')}") 
+        else:
+            return False
+        return True
 
     @property
     def get_model(self):
@@ -120,8 +164,8 @@ class TorchLearner(Learner, Generic[T_co]):
     def eval(self):
         self.model.eval()
 
-class SupremeLearner (TorchLearner):
-    def __init__(self, model: Module, criterion=None, optimizer=None, scheduler=None, resume: bool = False, resume_path: str = None) -> None:
+class SupervisedLearner (TorchLearner):
+    def __init__(self, model: Module, criterion=None, optimizer=None, scheduler=None) -> None:
         super().__init__(model, criterion, optimizer, scheduler)
 
     def fit(self, batch: Tensor, device: int, logger):

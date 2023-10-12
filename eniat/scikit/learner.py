@@ -1,6 +1,6 @@
 from typing import TypeVar
 from abc import abstractmethod
-from ..base import Learner
+from ..core import Learner
 from sklearn.base import BaseEstimator
 
 

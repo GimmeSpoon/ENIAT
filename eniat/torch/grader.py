@@ -1,56 +1,60 @@
 from typing import Callable, TypeVar, Union, Literal, Sequence, Any
-from ..base import Grader, Learner
-from ..data import Course
+from ..core import Grader, Learner, Course
 from .predictor import TorchPredictor
+from ..utils import Logger
 import torch
 import torch.distributed as dist
 from omegaconf import DictConfig
 import os
 
 C = TypeVar('C', bound=Course)
-L = TypeVar('L', bound=Learner)
+M = TypeVar('M', bound=Learner)
+L = TypeVar('L', bound=Logger)
+
+def load_grader(grader_conf:DictConfig, log:L, course=None, learner=None):
+    grader = TorchGrader(grader_conf, course=course, learner=learner)
+    log.info("Grader instance created.")
+    return grader
 
 class TorchGrader (Grader, TorchPredictor):
 
-    def __init__(self, conf: DictConfig, methods: Union[str, Callable[..., Any], Sequence[Union[str, Callable[..., Any]]]] = None, logger=None, course:C = None, options: list[dict] = None) -> None:
-        super().__init__(conf, methods, logger, course, options)
+    def __init__(
+            self,
+            conf: DictConfig,
+            methods: Union[str, Callable[..., Any],Sequence[Union[str, Callable[..., Any]]]] = None,
+            options: list[dict] = None,
+            logger=None,
+            course:C = None,
+            learner:M = None,
+            ) -> None:
+        super().__init__(conf, methods, options, logger, course, learner)
 
     def eval(
             self,
-            learner:L,
-            data:C=None,
+            learner:M=None,
+            course:C=None,
             timestep:int=None,
             unit:Literal['epoch', 'step']=None,
-            step_check:bool=False,
             final:bool=True,
             position:int = 0,
             env_conf:DictConfig = None,
-            skip_prepare:bool = False
             ):
-            
-        if not skip_prepare:
-            self.prepare()
-
-        if step_check:
-            if self.conf.unit is None or self.conf.unit == 'none' or self.conf.interval is None or self.conf.interval == 0:
-                raise ValueError("You're trying to evaluate at preconfigured steps but configurations of Grader have no settings for eval strategy.")
-            if self.conf.unit != unit or timestep % self.conf.interval != 0:
+    
+        if timestep is not None and unit is not None:
+            if self.conf.scheme.unit != unit or timestep % self.conf.scheme.interval != 0:
                 return
-
-        self.log.info("Evaluation started...")
-
-        if data is None:
-            data = self.course
 
         if self.conf.env.type == 'keep':
             self.conf.env = env_conf
-        
-        self.loader = self.get_loader('eval', data)
-        
-        self.learner = learner
 
-        self.log.info("Test dataset prepared.")
+        if course is None:
+            self.course = course
 
+        if learner is None:
+            self.learner = learner
+
+        self.log.info("Evaluation started...")        
+        
         if self.conf.env.type == 'remote':
             raise NotImplementedError("sorry, remote grader is still in development.")
         elif self.conf.env.type == 'single':
@@ -69,4 +73,4 @@ class TorchGrader (Grader, TorchPredictor):
                 self.log.info("Evaluation completed.")
                 return eval_result
             else:
-                raise ValueError(f"Shapes of Predictions are different from ground truth. {res.shape}, {gt.shape}")
+                raise ValueError(f"A shape of output is different from that of ground truth. {res.shape}, {gt.shape}")

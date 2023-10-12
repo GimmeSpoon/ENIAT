@@ -8,18 +8,24 @@ from torch.nn import DataParallel as DP
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, BackwardPrefetch
 from torch.distributed.fsdp.wrap import always_wrap_policy, size_based_auto_wrap_policy, lambda_auto_wrap_policy, transformer_auto_wrap_policy, enable_wrap, wrap
-from torch.distributed.optim import PostLocalSGDOptimizer, ZeroRedundancyOptimizer
+from torch.distributed.optim import PostLocalSGDOptimizer, ZeroRedundancyOptimizer, DistributedOptimizer
 import torch.distributed.algorithms.model_averaging.averagers as averagers
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 from omegaconf import DictConfig
-from hydra.core.hydra_config import HydraConfig
-from hydra.core.utils import configure_log
-from ..data import get_course_instance
-from .learner import load_learner
+from ..utils import Logger
 import os
+import contextlib
 import warnings
 import functools
+from pathlib import Path
+import numpy as np
+import random
+
+L = TypeVar('L', bound=Logger)
+
+ENV_NON_DIST_TYPES = ('single', 'DP')
+ENV_DIST_TYPES = ('DDP', 'torchrun', 'FSDP')
 
 class Hooker:
     def __init__(
@@ -60,136 +66,217 @@ def distributed (fn:Callable) -> Callable:
 
         if not dist.is_initialized():
 
-            if self.env.type == "single": # default
-                device = device if (device is not None) else (self.env.dev_id if (isinstance(self.env.dev_id, int)) else self.env.dev_id[0])
+            if self.conf.env.type == "single": # default
+                device = device if (device is not None) else (self.conf.env.device_id if (isinstance(self.conf.env.device_id, int)) else self.conf.env.device_id[0])
                 return fn(self, device, device, silent, position, final, **(kwargs or {}))
-            elif self.env.type=="DP": # DP (Data Parallel)
+            elif self.conf.env.type=="DP": # DP (Data Parallel)
                 return fn(self, 'cuda', 0, silent, position, final, **(kwargs or {}))
 
-            if self.env.debug:
+            if self.conf.env.debug:
                 os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
                 os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
 
             if dist.is_torchelastic_launched():
                 #torchrun
-                self.hc = HydraConfig.get()
                 self._torchrun_init(self)
                 return fn(int(os.environ['LOCAL_RANK']), int(os.environ['RANK']), silent, position, final, **(kwargs or {}))
             else:
                 #DDP or FSDP
-                spawn(self._ddp_init, (fn.__name__, HydraConfig.get(), silent, position, final, *[kwargs[key] for key in kwargs]), nprocs=self.env.local_size, join=True)
+                spawn(self._ddp_init, (fn.__name__, silent, position, final, *[kwargs[key] for key in kwargs]), nprocs=self.conf.env.dist.local_size, join=True)
         else:
             if dist.get_rank() == 0:
                 return fn(self, device, global_rank, silent, position, final, **(kwargs or {}))
             else:
-                warnings.simplefilter("ignore")
-                with self.log.silent():
-                    return fn(self, device, global_rank, True, position, final, **(kwargs or {}))
+                with contextlib.redirect_stdout(None):
+                    with contextlib.redirect_stderr(None):
+                        return fn(self, device, global_rank, True, position, final, **(kwargs or {}))
                 
     return wrapper
 
 class TorchPredictor():
 
     def __init__(self, env_configuration:DictConfig, hooks:dict=None) -> None:
-        self.env = env_configuration
         self.hooker = Hooker()
 
     def get_loader(self, data_label:str, dataset=None) -> DataLoader:
         if dataset is None:
-            dataset = self.course.get_dataset(data_label)
-        if self.env.type != 'single' and self.env.type != 'DP':
-            return DataLoader(dataset, batch_size=self.batch_size, shuffle=self.loader.shuffle, num_workers=self.loader.num_workers, pin_memory=self.loader.pin_memory) if not dist.is_initialized() else \
-            DataLoader(dataset, batch_size=self.batch_size, shuffle=self.loader.shuffle, num_workers=self.loader.num_workers, pin_memory=self.loader.pin_memory, sampler=DistributedSampler(dataset, num_replicas=self.env.world_size, rank=self.env.global_rank))
+            if isinstance(data_label, str):
+                dataset = self.course.get(data_label)
+            elif data_label:
+                for _label in data_label:
+                    self.course.get(_label)
+        if self.conf.env.type in ENV_DIST_TYPES:
+            return DataLoader(dataset, batch_size=self.conf.loader.batch_size, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory) if not dist.is_initialized() else \
+            DataLoader(dataset, batch_size=self.conf.loader.batch_size, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory, sampler=DistributedSampler(dataset, num_replicas=self.conf.env.dist.world_size, rank=self.conf.env.dist.global_rank))
         else:
-            return DataLoader( dataset, shuffle=self.loader.shuffle, num_workers=self.loader.num_workers, pin_memory=self.loader.pin_memory)
+            return DataLoader( dataset, batch_size=self.conf.loader.batch_size, shuffle=self.conf.loader.shuffle, num_workers=self.conf.loader.num_workers, pin_memory=self.conf.loader.pin_memory)
 
-    def _ddp_init(self, local_rank:int, fname:str, _hc=None, silent:bool=False, position:int=0, final:bool=False, *args) -> None:
-        configure_log(_hc.job_logging, _hc.verbose)
-        self.hc = _hc
+    def _ddp_init(self, local_rank:int, fname:str, silent:bool=False, position:int=0, final:bool=False, *args) -> None:
         os.environ["LOCAL_RANK"] = str(local_rank)
-        os.environ["MASTER_ADDR"] = self.env.master_address
-        os.environ["MASTER_PORT"] = self.env.master_port
-        rank = self.env.global_rank + local_rank
-        dist.init_process_group(backend=self.env.backend, init_method=self.env.init_method, world_size=self.env.world_size, rank=rank)
+        os.environ["MASTER_ADDR"] = self.conf.env.dist.master_address
+        os.environ["MASTER_PORT"] = str(self.conf.env.dist.master_port)
+        rank = self.conf.env.dist.global_rank + local_rank
+        dist.init_process_group(backend=self.conf.env.dist.backend, init_method=self.conf.env.dist.init_method, world_size=self.conf.env.dist.world_size, rank=rank)
         if not local_rank:
             self.log.info("configured DDP environment...")
         return getattr(self, fname)(local_rank, rank, silent, position, final, *args)
 
     def _torchrun_init(self):
         self.log.info("setting torchrun environment...")
-        self.env.local_size = int(os.environ['LOCAL_WORLD_SIZE'])
-        self.env.local_rank = int(os.environ['LOCAL_RANK'])
-        self.env.global_rank = int(os.environ['RANK'])
-        self.env.world_size = int(os.environ['WORLD_SIZE'])
-        dist.init_process_group(backend=self.env.backend)
+        self.conf.env.dist.local_size = int(os.environ['LOCAL_WORLD_SIZE'])
+        self.conf.env.dist.local_rank = int(os.environ['LOCAL_RANK'])
+        self.conf.env.dist.global_rank = int(os.environ['RANK'])
+        self.conf.env.dist.world_size = int(os.environ['WORLD_SIZE'])
+        dist.init_process_group(backend=self.conf.env.dist.backend)
     
-    def get_dist_opt(self, method:Literal['zero', 'postlocal'], opt=None, params=None, **kwargs):
+    def get_dist_opt(self, method:str, opt=None, params=None, _lr=None, **kwargs):
         if method == 'zero':
             if not params:
                 raise ValueError("model parameters require for zero redundancy optimizer.")
-            return ZeroRedundancyOptimizer(params, optimizer_class=getattr(torch.optim, type(opt).__name__), parameters_as_bucket_view=False, overlap_with_ddp=False, **kwargs)
+            return ZeroRedundancyOptimizer(params, optimizer_class=getattr(torch.optim, type(opt).__name__), lr=_lr, **kwargs)
         if method == 'postlocal':
             return PostLocalSGDOptimizer(opt, averagers.PeriodicModelAverager(**kwargs))
+        if method == 'default':
+            return DistributedOptimizer(opt, params, lr=_lr, **kwargs)
+        if method is None or method == 'none':
+            return opt
         raise ValueError(f'Distributed optimizer "{method}" is not valid. Configure as one of following choices:[zero, postlocal]')
     
+    def rand_all(self, seed) -> None:
+        if self.conf.env.type != 'single':
+            torch.cuda.manual_seed_all(seed)
+        else:
+            torch.cuda.manual_seed(seed)
+        torch.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        np.random.seed(seed)
+        random.seed(seed)
+        self.log.debug(f"Random seed set:{seed}")
+
+    def get_rand_state(self) -> dict:
+        return {
+            'cuda' : torch.cuda.get_rng_state_all() if self.conf.env.type != 'single' else torch.cuda.get_rng_state(),
+            'torch' : torch.get_rng_state(),
+            'numpy' : np.random.get_state(),
+            'random' : random.getstate()
+        }
+    
+    def set_rand_state(self, state:dict) -> None:
+        if self.conf.env.type != 'single':
+            torch.cuda.set_rng_state_all(state['cuda'])
+            for i, rng_state in enumerate(state['cuda']):
+                torch.cuda.set_rng_state(rng_state)
+        else:
+            torch.cuda.set_rng_state(state['cuda'])
+        torch.set_rng_state(state['torch'])
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        np.random.set_state(state['numpy'])
+        random.setstate(state['random'])
+        self.log.debug(f"Random state set.")
+
+    def load_state(self, path:str) -> None:
+        resumed = torch.load(path)
+        self.learner.load_optimizer(resumed['optimizer'])
+        self.conf.scheme.unit = resumed['unit']
+        self.set_rand_state(resumed['rng_state'])
+        self.conf.scheme.init_step = resumed['timestep']
+        self.conf.scheme.batch_size = resumed['batch_size']
+        self.conf.scheme.max_step = resumed['maxstep']
+        self.conf.env = resumed['env']
+        self.log.debug("Random state loaded.")
+
     def prepare (
             self,
-            device:int,
-            data_label:str=None,
-            compile:bool=False,
-            learner_cfg=None,
-            data_cfg=None,
+            device:Union[int, str],
             log=None,
-            resume_model:bool=False,
-            resume_opt:bool=False,
-            resume_dir:str=None,
-            resume_step:int=None,
-            dist_opt:str=None
+            data:bool=True,
+            learner:bool=True,
             ):
         
+        # logger
+        if dist.is_initialized():
+            _rank = dist.get_rank()
+            log.reload(log.name+f'.rank{_rank}')
+            if _rank:
+                log.be_inactive()
+            else:
+                log.load_rich_console()
+
         # data
-        if data_cfg is not None and data_label is not None:
-            self.course = get_course_instance(data_cfg, log)
-            self.loader = self.get_loader(data_label)
+        if data:
+            self.course.load()
+            self.loader = self.get_loader(self.conf.data_labels)
 
         # learner
-        if learner_cfg is not None:
-            self.learner, state = load_learner(learner_cfg, log, self.env.type, resume_model, resume_opt, resume_dir, resume_step)
-            model = self.learner.model
+        if learner:
+            self.learner.load()
+            model = self.learner.model.to(device)
 
-            if self.env.type != 'single' and self.env.type != 'DP':
-                if self.env.type == 'FSDP':
-                    if 'fsdp_policy' in self.env:
-                        if self.env.fsdp_policy == 'always':
-                            policy = functools.partial(getattr(torch.distributed.fsdp.wrap , "always_wrap_policy"), **self.env.fsdp_policy_options)
-                        elif self.env.fsdp_policy == 'size':
-                            policy = functools.partial(getattr(torch.distributed.fsdp.wrap , "size_based_auto_wrap_policy"), **self.env.fsdp_policy_options)
-                        elif self.env.fsdp_policy == 'lambda':
-                            policy = functools.partial(getattr(torch.distributed.fsdp.wrap , "lambda_auto_wrap_policy"), **self.env.fsdp_policy_options)
-                        elif self.env.fsdp_policy == "transformer":
-                            policy = functools.partial(getattr(torch.distributed.fsdp.wrap , "transformer_auto_wrap_policy"), **self.env.fsdp_policy_options) 
-                            policy = getattr()
-                        model = torch.compile(FSDP(model.to(device)), fsdp_auto_wrap_policy=policy) if compile else FSDP(model.to(device), fsdp_auto_wrap_policy=policy)
+            if self.conf.env.type in ENV_DIST_TYPES:
+                if self.conf.env.type == 'FSDP':
+                    if self.conf.env.dist.fsdp_policy:
+                        if self.conf.env.dist.fsdp_policy == 'always':
+                            policy = functools.partial(always_wrap_policy, **self.conf.env.dist.fsdp_policy_options)
+                        elif self.conf.env.dist.fsdp_policy == 'size':
+                            policy = functools.partial(size_based_auto_wrap_policy, **self.conf.env.dist.fsdp_policy_options)
+                        elif self.conf.env.dist.fsdp_policy == 'lambda':
+                            policy = functools.partial(lambda_auto_wrap_policy, **self.conf.env.dist.fsdp_policy_options)
+                        elif self.conf.env.dist.fsdp_policy == "transformer":
+                            policy = functools.partial(transformer_auto_wrap_policy, **self.conf.env.dist.fsdp_policy_options)
+                        self.learner.model = torch.compile(FSDP(model), fsdp_auto_wrap_policy=policy) if self.conf.scheme.compile else FSDP(model, fsdp_auto_wrap_policy=policy)
                     else:
-                        model = torch.compile(FSDP(model.to(device))) if compile else FSDP(model)
+                        self.learner.model = torch.compile(FSDP(model)) if self.conf.scheme.compile else FSDP(model)
                 else: #DDP
-                    model = torch.compile(DDP(model.to(device))) if compile else DDP(model)
-                optim = self.get_dist_opt(dist_opt, self.learner.opt, model.parameters())
-                self.learner.opt = optim
+                    self.learner.model = torch.compile(DDP(model)) if self.conf.scheme.compile else DDP(model)
+                
             else:
-                if self.env.type == "DP": # DP (Data Parallel)
-                    model = torch.compile(DP(model)).to(device) if compile else DP(model).to(device)
-                else: # Default
-                    model = torch.compile(model).to(device) if compile else model.to(device)
+                if self.conf.env.type == "DP": # DP (Data Parallel)
+                    self.learner.model = torch.compile(DP(model)) if self.conf.scheme.compile else DP(model)
+                else: # Single
+                    self.learner.model = torch.compile(model) if self.conf.scheme. compile else model
 
-            self.learner.model = model
+            # Resuming
+            if not self.learner.resume():
+                log.warning(f"Model checkpoint not resumed.")
+            
+            _res = True
+            if self.conf.resume_path is not None:
+                if isinstance(self.conf.resume_path, str):
+                    resume_path = Path(self.conf.resume_path)
+                if resume_path.is_file():
+                    self.learner.load_opt(path=resume_path)
+                else:
+                    raise FileNotFoundError(f"No checkpoint(optimizer) exists: {resume_path.absolute()}")
+                log.info(f"Training states resumed from {self.conf.resume_path}.")
+            elif self.conf.resume_dir:
+                if isinstance(self.conf.resume_dir, str):
+                    resume_dir = Path(self.conf.resume_dir)
+                if resume_dir.is_dir():
+                    self.learner.load_opt(path=resume_dir.joinpath(f"state_{self.conf.resume_step}.cpt"))
+                log.info(f"Training states resumed from {resume_dir} at timestep {self.conf.resume_step}.")
+            else:
+                log.warning("Training states not resumed.")
+                if self.conf.scheme.seed:
+                    self.rand_all(int(self.conf.scheme.seed))
+                elif not self.conf.scheme.seed:
+                    self.log.warning("Random seed is not set.")
+                    self.seed = random.random()
+                    self.rand_all(int(self.seed))
+                _res =  False
+        
+            if self.conf.env.type in ENV_DIST_TYPES:
+                self.learner.opt = self.get_dist_opt(self.conf.env.dist.optimizer, self.learner.opt, self.learner.model.parameters(), self.learner.conf.optimizer.options.lr)
+            
+            return _res
 
-        return state or None
+        return False
 
     @distributed
     def predict(self, device:Union[int, str], global_rank:int=None, silent:bool=False, position=0, final:bool=True, data_label:str='predict', skip_prepare:bool=False):
         if not skip_prepare:
-            self.prepare(device, data_label, self.accel, self.learner_conf, self.data_conf, self.log, self.env.optimizer if 'optimizer' in self.env else None)
+            self.prepare(device, self.log)
 
         ret = []
         gt = []

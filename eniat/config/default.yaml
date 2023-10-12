@@ -1,0 +1,130 @@
+task:
+package:
+output_dir:
+spinner:
+
+logger:
+  name: eniat
+  logging_dir: ./
+  type: DummyLogger
+  level: 10
+  silent: False
+  training_loss: True
+  json: False
+  xls: False
+  csv: False
+  mlflow:
+    run_id: 
+    exp_id: 
+    exp_name: 
+    uri: 
+  tensorboard:
+    log_dir: 
+    comment:
+    purge_step: 
+    max_queue: 10
+    flush_secs: 120
+    filename_suffix:
+
+data:
+
+learner:
+  cls:
+  path:
+  resume_path:
+  resume_dir:
+  resume_step:
+  model:
+    cls: 
+    path:
+    options:
+  loss:
+    cls: 
+    path:
+    options:
+  optimizer:
+    cls: 
+    path: 
+    options:
+  scheduler:
+    cls: 
+    path: 
+    options:
+
+trainer:
+  data_labels:
+  output_dir: ./
+  resume_path:
+  resume_dir:
+  resume_step:
+  scheme:
+    init_step: 0
+    max_step: 
+    seed: 
+    unit: 
+    save_interval: 
+    save_after_eval: False
+    compile: False
+    precision: 
+    dtype: 
+    gradient_scale: False
+  loader:
+    batch_size:
+    shuffle: False
+    num_workers: 0
+    pin_memory: False
+  env:
+    type: # single, DP, DDP, FSDP
+    elastic: False
+    debug: False
+    device_id: 0
+    dist:
+      local_rank: 
+      global_rank: 
+      local_size: 
+      world_size: 
+      init_method: env://
+      master_address: localhost
+      master_port: 8888
+      backend: 
+      optimizer: none
+      optimizer_options:
+      fsdp_policy:
+      fsdp_policy_options:
+
+grader:
+  data_labels:
+  scheme:
+    methods:
+    init_step: 0
+    max_step: 
+    seed: 
+    unit: 
+    eval_interval: 
+    compile: False
+    precision: 
+    dtype: 
+    gradient_scale: False
+  loader:
+    batch_size: 
+    shuffle: False
+    num_workers: 0
+    pin_memory: False
+  env:
+    type: none
+    elastic: False
+    debug: False
+    device_id: 0
+    dist:
+      local_rank: 
+      global_rank: 
+      local_size: 
+      world_size: 
+      init_method: env://
+      master_address: localhost
+      master_port: 8888
+      backend: 
+      optimizer: zero
+      optimizer_options:
+      fsdp_policy:
+      fsdp_policy_options:

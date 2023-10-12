@@ -1,4 +1,0 @@
-defaults:
-  - scheme: default_scheme
-  - loader: default_loader
-  - env: default_env

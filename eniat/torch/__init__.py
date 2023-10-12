@@ -1,15 +1,4 @@
-from .learner import TorchLearner, SupremeLearner
-from .trainer import TorchTrainer, torchload, distributed
-from .grader import TorchGrader
+from .learner import TorchLearner, SupervisedLearner, instantiate_learner, load_learner
+from .trainer import TorchTrainer, distributed, load_trainer
+from .grader import TorchGrader, load_grader
 from .predictor import TorchPredictor, to_tensor
-
-__all__ = [
-    'torchload',
-    'TorchLearner',
-    'SupremeLearner',
-    'TorchTrainer',
-    'distributed',
-    'TorchGrader',
-    'TorchPredictor',
-    'to_tensor',
-]

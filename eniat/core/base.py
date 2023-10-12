@@ -1,10 +1,13 @@
 from abc import ABCMeta, abstractmethod
-from typing import TypeVar
-from ..data.course import Course, FullCourse
+from typing import TypeVar, Callable, Sequence, Union, Any, Hashable
+from .course import Course, CourseBook
 from tqdm.auto import tqdm
 import sys
+import copy
 import warnings
+from omegaconf import DictConfig
 
+T_co = TypeVar('T_co', covariant=True)
 D = TypeVar('D', bound=Course)
 
 class ConfigurationError(Exception):
@@ -33,9 +36,80 @@ class Learner (metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def load_model(self): ...
+    def resume_model(self): ...
 
 L = TypeVar('L', bound=Learner)
+
+class Grader():
+    
+    class EvaluationResult():
+        def __init__(self) -> None:
+            self.__result = {}
+
+        def done(self, data:Any, label:Hashable=None):
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    self.__result[key] = value
+            else:
+                self.__result[label] = data
+
+        def as_dict(self) -> dict:
+            return copy.deepcopy(self.__result)
+
+        def __repr__(self) -> str:
+            return '\n'.join([f'{label:20} : {res}' for label, res in self.__result.items()])
+    
+    def __init__(
+            self,
+            conf:DictConfig,
+            methods:Union[str, Callable, Sequence[Union[str, Callable]]]=None,
+            options:list[dict]=None,
+            logger=None,
+            course:D=None,
+            learner:L=None
+            ) -> None:
+        self.methods = []
+        self.conf = conf
+        if conf.scheme.methods:
+            self.append_metric(conf.scheme.methods)
+        self.course = course
+        self.learner = learner
+        self.append_metric(methods)
+        self.log = logger
+        self.options = options
+
+    def append_metric(self, methods:Union[Callable, Sequence[Callable]]):
+        if isinstance(methods, Callable):
+            self.methods += [methods]
+        elif methods is not None:
+            for method in methods:
+                self.methods.append(method)
+
+    def is_enabled(self) -> bool:
+        return len(self.methods) > 0
+
+    def compute(self, prediction:T_co, ground_truth:T_co, options:list[dict]=None) -> dict:
+        result = {}
+        if options is None:
+            options = self.options
+        opt = 0
+        for method in self.methods:
+            result[method.__name__] = method(prediction, ground_truth, options[opt]) if options and options[opt] else \
+            method(prediction, ground_truth)
+            opt += 1
+
+        return result
+    
+    def __call__(self, prediction:T_co, ground_truth:T_co, options:list[dict]):
+        self.compute(prediction, ground_truth)
+
+class RemoteGrader():
+    '''Spawn a separated evalaution process'''
+    def __init__(self) -> None:
+        raise NotImplementedError()
+
+    def run() -> None:
+        pass
 
 class Trainer:
     r'''Base class for Trainer
