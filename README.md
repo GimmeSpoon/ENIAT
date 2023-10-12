@@ -2,54 +2,56 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-azure.svg)](https://opensource.org/licenses/MIT)
 
-Eniat is a Python template for various ML packages including PyTorch or Scikit-learn.
+Eniat is a Python template for various ML packages including PyTorch, Scikit-learn.
 
-Currently supports only PyTorch
+Currently supports only PyTorch :moyai:
 
 It provides several convenient features
 
-* automated training: you don't have to re-write same epoch loop everytime! (Pytorch)
-* automated distributed learning (PyTorch)
-* hydra config, logging integration
-* Package independent classes such as Trainer, Grader, etc.
-* some remote features: logging, evaluation, etc. (<strong>in progress</strong>)
+* automated training: you don't have to re-write same epoch-wise loop everytime!
+* automated distributed learning for PyTorch.
+* Easy configurations for your experiments.
+* Various package support (in the future)
 
 ## Quick Start
-### 1. CLI execution
 
-Install eniat with below command.
+### 1. Installation
+
+Install eniat with the below command.
 
 ```bash
 pip install eniat
 ```
 
-You can initiate any tasks with only console command.
+eniat installation doesn't convey ML packages such as [torch](https://pytorch.org/) or [sklearn](https://scikit-learn.org/stable/), so install one you need before using eniat. :moyai:
 
-With below command, it does nothing but will show you default config.
+### 2. CLI execution
+
+You can initiate any tasks with only console commands. :moyai:
+
+With below command, you can conduct ML experiemnts on console provided that you have proper resources for models and data. These configurations except basic arguments are based on [omegaconf](https://omegaconf.readthedocs.io/en/2.3_branch/), so refer to the documentation and provide valid arguments.
+
 ```bash
-eniat
+eniat -p PACKAGE -t TASK --OTHER_CONFIGS_YOU_NEED
 ```
 
-For training or whatever task you want, just type command in the hydra style.
-You should have some knowledges about hydra configuration. Below command will initiate training based on a config file located in `./config` and named `basic.yaml`.
+Or you can simply write every configurations you need into one yaml and just type the path of it like below. I strongly recommend this, because ML experiments usually require quite large amount of parameters. Make a base configuration yaml file, and modify slightly by typing additional configurations into console command, and it will be much more convenient.
 
-```
+```bash
 eniat -c=PATH_TO_CONFIG_FILE
 ```
 
-Detailed modification of you config files is required for better configuration. I recommend to refer hydra [documentation](https://hydra.cc/docs/intro/) if you're not familiar with it.
-
-### 2. Custom code execution
+### 3. Custom code execution
 
 eniat is designed for various environments from mere `.py` codes to jupyter notebooks.
 
-The most fundamental component of eniat is `Trainer`. It is in charge of training your models. In the other hand, `Grader` only evaluates your model. Below is an example code of PyTorch training wih eniat.
+The most fundamental component of eniat is `Trainer`. It is in charge of training your models. In the other hand, `Grader` only evaluates your model. Below is an example code of torch training wih eniat.
 
 ```python
-from eniat.utils.statelogger import StateLogger
+from eniat.utils.statelogger import DummyLogger
 from eniat.torch import TorchTrainer, TorchGrader
 
-logger = StateLogger() # Default logger for Eniat
+logger = DummyLogger() # Default logger for Eniat
 grader = TorchGrader(grader_cfg, logger = logger) # If none, train without evaluation
 trainer = TorchTrainer(trainer_cfg, learner_cfg, data_cfg, logger, grader)
 

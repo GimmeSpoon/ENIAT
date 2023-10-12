@@ -1,52 +1,62 @@
+"""Base classes for basic components.
+Each package-based components such as Trainer or Grader inherit classes from this module."""
+
 from abc import ABCMeta, abstractmethod
 from typing import TypeVar, Callable, Sequence, Union, Any, Hashable
-from .course import Course, CourseBook
-from tqdm.auto import tqdm
-import sys
+from .course import CourseBook
 import copy
 import warnings
 from omegaconf import DictConfig
 
-T_co = TypeVar('T_co', covariant=True)
-D = TypeVar('D', bound=Course)
+T_co = TypeVar("T_co", covariant=True)
+B = TypeVar("B", bound=CourseBook)
+
 
 class ConfigurationError(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
 
-class Warning ():
+
+class Warning:
     def __init__(self, logger) -> None:
         self.logger = logger
 
     def __call__(self, message, category, filename, lineno, file=None, line=None):
-        self.logger.warning(warnings.formatwarning(message, category, filename, lineno, line))
+        self.logger.warning(
+            warnings.formatwarning(message, category, filename, lineno, line)
+        )
 
-class Learner (metaclass=ABCMeta):
-    r'''Base class for all learners
+
+class Learner(metaclass=ABCMeta):
+    r"""Base class for all learners
     It is basically wrapper class for model such as module in pytorch or estimator in scikit-learn.
     This class is meant for just simple training and inference features, not for some other things like datastream manipulation.
-    It is because the model could be used for inference only task in the future updates.'''
+    It is because the model could be used for inference only task in the future updates."""
 
     @abstractmethod
     def predict(self, batch):
-        raise NotImplementedError(f"'predict' method of {self.__class__.__name__} class is not implemented.")
+        raise NotImplementedError(
+            f"'predict' method of {self.__class__.__name__} class is not implemented."
+        )
 
     @abstractmethod
     def fit(self, batch):
         pass
 
     @abstractmethod
-    def resume_model(self): ...
+    def resume_model(self):
+        ...
 
-L = TypeVar('L', bound=Learner)
 
-class Grader():
-    
-    class EvaluationResult():
+L = TypeVar("L", bound=Learner)
+
+
+class Grader:
+    class EvaluationResult:
         def __init__(self) -> None:
             self.__result = {}
 
-        def done(self, data:Any, label:Hashable=None):
+        def done(self, data: Any, label: Hashable = None):
             if isinstance(data, dict):
                 for key, value in data.items():
                     self.__result[key] = value
@@ -57,17 +67,19 @@ class Grader():
             return copy.deepcopy(self.__result)
 
         def __repr__(self) -> str:
-            return '\n'.join([f'{label:20} : {res}' for label, res in self.__result.items()])
-    
+            return "\n".join(
+                [f"{label:20} : {res}" for label, res in self.__result.items()]
+            )
+
     def __init__(
-            self,
-            conf:DictConfig,
-            methods:Union[str, Callable, Sequence[Union[str, Callable]]]=None,
-            options:list[dict]=None,
-            logger=None,
-            course:D=None,
-            learner:L=None
-            ) -> None:
+        self,
+        conf: DictConfig,
+        methods: Union[str, Callable, Sequence[Union[str, Callable]]] = None,
+        options: list[dict] = None,
+        logger=None,
+        course: B = None,
+        learner: L = None,
+    ) -> None:
         self.methods = []
         self.conf = conf
         if conf.scheme.methods:
@@ -78,7 +90,7 @@ class Grader():
         self.log = logger
         self.options = options
 
-    def append_metric(self, methods:Union[Callable, Sequence[Callable]]):
+    def append_metric(self, methods: Union[Callable, Sequence[Callable]]):
         if isinstance(methods, Callable):
             self.methods += [methods]
         elif methods is not None:
@@ -88,31 +100,39 @@ class Grader():
     def is_enabled(self) -> bool:
         return len(self.methods) > 0
 
-    def compute(self, prediction:T_co, ground_truth:T_co, options:list[dict]=None) -> dict:
+    def compute(
+        self, prediction: T_co, ground_truth: T_co, options: list[dict] = None
+    ) -> dict:
         result = {}
         if options is None:
             options = self.options
         opt = 0
         for method in self.methods:
-            result[method.__name__] = method(prediction, ground_truth, options[opt]) if options and options[opt] else \
-            method(prediction, ground_truth)
+            result[method.__name__] = (
+                method(prediction, ground_truth, options[opt])
+                if options and options[opt]
+                else method(prediction, ground_truth)
+            )
             opt += 1
 
         return result
-    
-    def __call__(self, prediction:T_co, ground_truth:T_co, options:list[dict]):
+
+    def __call__(self, prediction: T_co, ground_truth: T_co, options: list[dict]):
         self.compute(prediction, ground_truth)
 
-class RemoteGrader():
-    '''Spawn a separated evalaution process'''
+
+class RemoteGrader:
+    """Spawn a separated evalaution process"""
+
     def __init__(self) -> None:
         raise NotImplementedError()
 
     def run() -> None:
         pass
 
+
 class Trainer:
-    r'''Base class for Trainer
+    r"""Base class for Trainer
 
     Trainer provides logging and saving checkpoints, furthermore lessen the repetitive parts in usual machine learning codes.
     BaseTrainer provides fit, eval, and predict features even it not specifying compatibility with libraries such as PyTorch or Scikit-learn.
@@ -126,28 +146,21 @@ class Trainer:
         :param conf: Trainer configuration structured by omegaconf DictConfig.
         :param grader: Evalutor from eniat package.
         :param logger: Logger from eniat package. required.
-    '''
-    def __init__(self, course:D=None, learner:L=None, conf=None, grader=None, logger=None) -> None:
+    """
+
+    def __init__(
+        self, course: B = None, learner: L = None, conf=None, grader=None, logger=None
+    ) -> None:
         self.course = course
         self.learner = learner
         self.conf = conf
         self.grader = grader
         self.log = logger
 
-    def fit(self, silent:bool=False, eval:bool=False):
-        self.course.select('train')
-        for epoch in (epoch_bar:=tqdm( [1] if not self.conf.epoch else self.conf.epoch, desc='Training', unit='epoch', position=0, leave=False, disable=silent)):
-            self.learner.fit(batch=self.course.next())
+    @abstractmethod
+    def fit(self, silent: bool = False, eval: bool = False):
+        raise NotImplementedError()
 
+    @abstractmethod
     def predict(self):
-        self.course.select('predict')
-        preds = self.learner.predict(batch=self.course.next())
-        return preds
-
-    def eval(self):
-        self.course.select('eval')
-        preds, gt = self.learner.eval(batch=self.course.next())
-        if self.grader:
-            return self.grader(preds, gt)
-        else:
-            return Grader.eval(preds, gt)
+        raise NotImplementedError()

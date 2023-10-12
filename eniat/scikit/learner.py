@@ -4,10 +4,11 @@ from ..core import Learner
 from sklearn.base import BaseEstimator
 
 
-B = TypeVar('B', bound=BaseEstimator)
+B = TypeVar("B", bound=BaseEstimator)
 
-class ScikitLearner (Learner):
-    def __init__(self, model:B) -> None:
+
+class ScikitLearner(Learner):
+    def __init__(self, model: B) -> None:
         super(ScikitLearner).__init__()
 
         self.model = model
@@ -15,7 +16,7 @@ class ScikitLearner (Learner):
     @abstractmethod
     def predict(self, X):
         pass
-    
+
     @abstractmethod
     def fit_step(self):
         pass

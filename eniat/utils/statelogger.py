@@ -1,7 +1,7 @@
-'''statelogger module includes loggers to record any information about
+"""statelogger module includes loggers to record any information about
 experiments you conduct. The basic feature is to log outputs to stdout
 just like builtin package 'logging', but also it can log to files or
-other tools such as Tensorboard or MLFlow.'''
+other tools such as Tensorboard or MLFlow."""
 
 import logging
 from logging import Formatter, StreamHandler
@@ -29,13 +29,14 @@ _FILE_FORMAT = "[%(asctime)s][%(name)s][%(levelname)s] %(message)s"
 _STRM_FORMAT = "%(message)s"
 _DATE_FORMAT = "%y-%m-%d %H:%M:%S"
 
-T_co = TypeVar('T_co', covariant=True)
+T_co = TypeVar("T_co", covariant=True)
+
 
 class Logger:
     @abstractmethod
     def info(self, msg, *args, **kwargs):
         pass
-    
+
     @abstractmethod
     def debug(self, msg, *args, **kwargs):
         pass
@@ -51,18 +52,19 @@ class Logger:
     @abstractmethod
     def critical(self, msg, *args, **kwargs):
         pass
-        
+
     @abstractmethod
     def log(self, level, msg, *args, **kwargs):
         pass
-        
+
     @abstractmethod
     def exception(self, msg, *args, **kwargs):
         pass
 
     @abstractmethod
-    def log_state(self, data:dict) -> None:
+    def log_state(self, data: dict) -> None:
         pass
+
 
 class DummyLogger(Logger):
     r"""DummyLogger just prints to stdout every log messages. It doesn't
@@ -70,7 +72,9 @@ class DummyLogger(Logger):
     you need to record any information about experiments, You should
     consider using other Loggers such as StateLogger."""
 
-    def __init__(self, name, level, conf, silent:bool=False, inactive:bool=False) -> None:
+    def __init__(
+        self, name, level, conf, silent: bool = False, inactive: bool = False
+    ) -> None:
         self.name = name
         self.level = level
         self.conf = conf
@@ -83,8 +87,10 @@ class DummyLogger(Logger):
 
         self.init_console_logger(name, level, conf.logging_dir)
 
-    def init_console_logger(self, name:str, level:int = 0, logging_dir:Union[str,Path]=None) -> None:
-        
+    def init_console_logger(
+        self, name: str, level: int = 0, logging_dir: Union[str, Path] = None
+    ) -> None:
+
         if isinstance(logging_dir, str):
             logging_dir = Path(logging_dir)
         logging_dir.mkdir(parents=True, exist_ok=True)
@@ -92,9 +98,15 @@ class DummyLogger(Logger):
         file_format = Formatter(_FILE_FORMAT, _DATE_FORMAT)
         strm_format = Formatter(_STRM_FORMAT, _DATE_FORMAT)
 
-        file_handler = RotatingFileHandler(logging_dir.joinpath('eniat.log'), maxBytes=10_485_760, backupCount=1,)
+        file_handler = RotatingFileHandler(
+            logging_dir.joinpath("eniat.log"),
+            maxBytes=10_485_760,
+            backupCount=1,
+        )
         file_handler.setFormatter(file_format)
-        rich_handler = RichHandler(rich_tracebacks=True, show_path=False, tracebacks_suppress=[])
+        rich_handler = RichHandler(
+            rich_tracebacks=True, show_path=False, tracebacks_suppress=[]
+        )
         rich_handler.setFormatter(strm_format)
 
         logging.basicConfig(level=level, handlers=[rich_handler, file_handler])
@@ -115,11 +127,12 @@ class DummyLogger(Logger):
         self.init_console_logger(
             name if name is not None else self.name,
             level if level is not None else self.level,
-            logging_dir if logging_dir is not None else self.conf.logging_dir)
+            logging_dir if logging_dir is not None else self.conf.logging_dir,
+        )
 
     def info(self, msg, *args, **kwargs):
         return self.console.info(msg, *args, **kwargs) if not self.silent else None
-    
+
     def debug(self, msg, *args, **kwargs):
         return self.console.debug(msg, *args, **kwargs) if not self.silent else None
 
@@ -133,56 +146,65 @@ class DummyLogger(Logger):
         return self.console.critical(msg, *args, **kwargs) if not self.silent else None
 
     def log(self, level, msg, *args, **kwargs):
-        return self.console.log(level, msg, *args, **kwargs) if not self.silent else None
+        return (
+            self.console.log(level, msg, *args, **kwargs) if not self.silent else None
+        )
 
     def exception(self, msg, *args, **kwargs):
         return self.console.exception(msg, *args, **kwargs) if not self.silent else None
 
-    def log_state(self, data:dict) -> None:
+    def log_state(self, data: dict) -> None:
         return None
-    
+
+
 class StateLogger(DummyLogger):
-    '''StateLogger keeps tracks of training states and can output the
+    """StateLogger keeps tracks of training states and can output the
     results as files. Specifically, data transferred by 'log_state'
-    will be recorded into State instance.'''
+    will be recorded into State instance."""
 
     class StateTable:
         def __init__(self) -> None:
             self.__state = {}
-            self.__e = self.__state['epoch'] = {}
-            self.__n = self.__state['global'] = []
+            self.__e = self.__state["epoch"] = {}
+            self.__n = self.__state["global"] = []
 
-        def add(self, data:dict, epoch:int=None, step:int=None) -> None:
-            if 'epoch' in data:
-                _e = data.pop('epoch')
-                if 'step'  in data:
-                    _s = data.pop('step')
+        def add(self, data: dict, epoch: int = None, step: int = None) -> None:
+            if "epoch" in data:
+                _e = data.pop("epoch")
+                if "step" in data:
+                    _s = data.pop("step")
                     if _e in self.__e:
                         self.__e[_e][_s] = data
                     else:
-                        self.__e[_e] = {_s:data}
+                        self.__e[_e] = {_s: data}
                 else:
                     if _e in self.__e:
-                        self.__e[_e]['epoch-state'].append(data)
+                        self.__e[_e]["epoch-state"].append(data)
                     else:
-                        self.__e[_e] = {'epoch-state':[data,]}
+                        self.__e[_e] = {
+                            "epoch-state": [
+                                data,
+                            ]
+                        }
             else:
                 self.__n.append(data)
 
         def get(self) -> T_co:
             pass
 
-        def to_json(self, path:Union[Path, str]) -> None:
-            with open(path, 'w', encoding='utf8') as f:
+        def to_json(self, path: Union[Path, str]) -> None:
+            with open(path, "w", encoding="utf8") as f:
                 json.dump(self.__state, f, ensure_ascii=False, indent=4)
 
-        def to_csv(self, path:Union[Path, str]) -> None:
+        def to_csv(self, path: Union[Path, str]) -> None:
             pass
 
-        def to_xls(self, path:Union[Path, str]) -> None:
+        def to_xls(self, path: Union[Path, str]) -> None:
             pass
 
-    def __init__(self, name: str, level:int = 0, conf:DictConfig = None, silent:bool=False) -> None:
+    def __init__(
+        self, name: str, level: int = 0, conf: DictConfig = None, silent: bool = False
+    ) -> None:
         super().__init__(name, level, conf, silent)
         self.__state = self.StateTable()
 
@@ -209,17 +231,17 @@ class StateLogger(DummyLogger):
 
     def removeHandler(self, hdlr):
         return self.console.removeHandler(hdlr)
-    
+
     def handle(self, record):
         return self.console.handle(record)
-    
+
     def hasHandlers(self):
         return self.hasHandlers()
 
     def findCaller(self, stack_info=False, stacklevel=1):
-        return self.console.findCaller(stack_info, stacklevel) 
+        return self.console.findCaller(stack_info, stacklevel)
 
-    def check_loss_policy(self, _t:int, _u:str) -> bool:
+    def check_loss_policy(self, _t: int, _u: str) -> bool:
         if _t == None and _u == None:
             return True
         return (_u == self.conf.unit) and (_t % self.conf.log_interval) == 0
@@ -229,37 +251,47 @@ class StateLogger(DummyLogger):
         return self.__state
 
     def log_state(
-            self,
-            data:dict,
-            timestep:int=None,
-            unit:Literal['epoch', 'step']=None,
-            to_json:bool=None,
-            to_xls:bool=None,
-            to_csv:bool=None,
-            silent:bool=False,
-            table:bool=False,
-            ):
+        self,
+        data: dict,
+        timestep: int = None,
+        unit: Literal["epoch", "step"] = None,
+        to_json: bool = None,
+        to_xls: bool = None,
+        to_csv: bool = None,
+        silent: bool = False,
+        table: bool = False,
+    ):
         if not self.check_loss_policy(timestep, unit) or self.inactive:
             return
-        
-        if unit == 'epoch':
+
+        if unit == "epoch":
             self.state.add(data, epoch=timestep)
-        if unit == 'step':
+        if unit == "step":
             self.state.add(data, step=timestep)
 
-        if (to_json if to_json is not None else self.conf.json):
-            self.__state.to_json(Path(self.conf.logging_dir).joinpath('training_state.json').absolute())
-        if (to_xls if to_xls is not None else self.conf.xls):
+        if to_json if to_json is not None else self.conf.json:
+            self.__state.to_json(
+                Path(self.conf.logging_dir).joinpath("training_state.json").absolute()
+            )
+        if to_xls if to_xls is not None else self.conf.xls:
             raise NotImplementedError("sorry. xls is not supported yet.")
-        if (to_csv if to_csv is not None else self.conf.csv):
+        if to_csv if to_csv is not None else self.conf.csv:
             raise NotImplementedError("Sorry, csv is not supported yet.")
-        
+
         if not silent:
             if table:
                 if len(data) == 1:
-                    table = Table(data.keys()[0], data.values()[0], title=f"Training State ({unit.capitalize()} {timestep})")
+                    table = Table(
+                        data.keys()[0],
+                        data.values()[0],
+                        title=f"Training State ({unit.capitalize()} {timestep})",
+                    )
                 else:
-                    table = Table('State', 'Value', title=f"Training State ({unit.capitalize()} {timestep})")
+                    table = Table(
+                        "State",
+                        "Value",
+                        title=f"Training State ({unit.capitalize()} {timestep})",
+                    )
                     for item in data.items():
                         table.add_row(item[0], str(item[1]))
                 with self.rich_console.capture() as cap:
@@ -267,27 +299,44 @@ class StateLogger(DummyLogger):
                 _str = cap.get()
                 self.info(_str, extra={"markup": True})
             else:
-                _str = f'Training State ({unit.capitalize()} {timestep})\n' + '\n'.join([f"[green]{item[0]}[/] : {item[1]}" for item in data.items()])
+                _str = f"Training State ({unit.capitalize()} {timestep})\n" + "\n".join(
+                    [f"[green]{item[0]}[/] : {item[1]}" for item in data.items()]
+                )
                 self.info(_str, extra={"markup": True})
 
-class TensorboardLogger(StateLogger):
-    '''TensorboardLogger literally features Tensorboard from torch.utils.
-    This inherits StateLogger, thus you can record Tensorboard and files at
-    the same time if you wish.'''
 
-    def __init__(self, name: str, conf: DictConfig = None, resume_path: str = None) -> None:
+class TensorboardLogger(StateLogger):
+    """TensorboardLogger literally features Tensorboard from torch.utils.
+    This inherits StateLogger, thus you can record Tensorboard and files at
+    the same time if you wish."""
+
+    def __init__(
+        self, name: str, conf: DictConfig = None, resume_path: str = None
+    ) -> None:
         super().__init__(name, conf, resume_path)
-    
+
     def prepare(self) -> None:
         tb = __import__("torch.utils.tensorboard", fromlist=["SummaryWriter"])
-        self.tb = tb.SummaryWriter(self.conf.logging_dir or Path.joinpath(Path(self.hc.runtime.output_dir), 'tensorboard'))
+        self.tb = tb.SummaryWriter(
+            self.conf.logging_dir
+            or Path.joinpath(Path(self.hc.runtime.output_dir), "tensorboard")
+        )
 
     def reload(self, *args, **kwargs) -> None:
         super().reload(*args, **kwargs)
         self.prepare()
 
-    def log_state(self, data:dict, timestep:int, unit:Literal['epoch', 'step'], tag:str=None, to_json:bool=None, to_xls:bool=None, silent:bool=False):
-        
+    def log_state(
+        self,
+        data: dict,
+        timestep: int,
+        unit: Literal["epoch", "step"],
+        tag: str = None,
+        to_json: bool = None,
+        to_xls: bool = None,
+        silent: bool = False,
+    ):
+
         if not self.check_loss_policy(data, unit) or self.inactive:
             return
         if len(data) == 1:
@@ -297,107 +346,167 @@ class TensorboardLogger(StateLogger):
             self.log_scalars(data, timestep, tag, silent=silent)
 
         super().log_state(data, timestep, unit, tag, to_json, to_xls, silent=True)
-        
-    def log_scalar(self, key:str, value, step:int, silent:bool=False):
+
+    def log_scalar(self, key: str, value, step: int, silent: bool = False):
         if self.inactive:
             return
         self.tb.add_scalar(key, value, step)
         if not silent:
             self.console.info("Current state logged\n" + key + ": " + str(value))
 
-    def log_scalars(self, key_value:dict, step:int, tag:str=None, silent:bool=False):
+    def log_scalars(
+        self, key_value: dict, step: int, tag: str = None, silent: bool = False
+    ):
         if self.inactive:
             return
         self.tb.add_scalars(tag, key_value, step)
         if not silent:
-            self.console.info("Current state logged\n"+(f"{key} : {value}\n" for key, value in key_value.items()))
+            self.console.info(
+                "Current state logged\n"
+                + (f"{key} : {value}\n" for key, value in key_value.items())
+            )
 
-    def log_image(self, image, tag:str=None, step:int=None, format:str=None, filepath:str=None, silent:bool=False):
+    def log_image(
+        self,
+        image,
+        tag: str = None,
+        step: int = None,
+        format: str = None,
+        filepath: str = None,
+        silent: bool = False,
+    ):
         if self.inactive:
             return
         self.tb.add_image(tag, image, step, format)
         if not silent:
             self.console.info(f"Logged an image to tensorboard")
-    
-    def log_figure(self, figure, tag:str=None, step:int=None, close:bool=None, filepath:str=None, silent:bool=False):
+
+    def log_figure(
+        self,
+        figure,
+        tag: str = None,
+        step: int = None,
+        close: bool = None,
+        filepath: str = None,
+        silent: bool = False,
+    ):
         if self.inactive:
             return
         self.tb.add_figure(tag, figure, step, close)
         if not silent:
             self.console.info(f"Logged a figure to tensorboard")
 
+
 class MLFlowLogger(StateLogger):
-    '''TensorboardLogger literally features Tensorboard from torch.utils.
+    """TensorboardLogger literally features Tensorboard from torch.utils.
     This inherits StateLogger, thus you can record Tensorboard and files at
-    the same time if you wish.'''
+    the same time if you wish."""
 
     def __init__(
-            self,
-            name: str,
-            conf: DictConfig = None,
-            resume_path = None,
-            ) -> None:
+        self,
+        name: str,
+        conf: DictConfig = None,
+        resume_path=None,
+    ) -> None:
         super().__init__(name, conf, resume_path)
 
-    def prepare(self, ) -> None:
-        
+    def prepare(
+        self,
+    ) -> None:
+
         self.uri = self.conf.mlflow.uri
-        self.mf = __import__('mlflow')
+        self.mf = __import__("mlflow")
         self.mf.set_tracking_uri(self.uri)
 
         if self.conf.mlflow.autolog:
             # Refer to autolog reference and fix here
-            self.mf.autolog()    
+            self.mf.autolog()
         elif self.conf.mlflow.run_id is not None:
-            self.current_run = self.mf.start_run(self.conf.mlflow.run_id, ru_name=self.conf.mlflow.run_name)
+            self.current_run = self.mf.start_run(
+                self.conf.mlflow.run_id, ru_name=self.conf.mlflow.run_name
+            )
         else:
             if self.conf.mlflow.exp_id is not None:
-                self.experiment = self.mf.set_experiment(experiment_id=self.conf.mlflow.exp_id)
+                self.experiment = self.mf.set_experiment(
+                    experiment_id=self.conf.mlflow.exp_id
+                )
             else:
-                self.experiment = self.mf.set_experiment(experiment_name=self.conf.mlflow.exp_name)
+                self.experiment = self.mf.set_experiment(
+                    experiment_name=self.conf.mlflow.exp_name
+                )
             self.current_run = self.mf.start_run(experiment_id=self.conf.mlflow.exp_id)
 
     def reload(self, *args, **kwargs) -> None:
         super().reload(*args, **kwargs)
         self.prepare()
 
-    def __del__ (self) -> None:
+    def __del__(self) -> None:
 
-        if not 'mf' in self.__dict__:
+        if not "mf" in self.__dict__:
             return
-        
+
         if self.mf is not None and self.mf.active_run() is not None:
             self.mf.end_run()
 
-    def log_scalar(self, key:str, value, step:int, silent:bool=False):
+    def log_scalar(self, key: str, value, step: int, silent: bool = False):
         if self.inactive:
             return
         self.mf.log_metric(key, value, step)
         if not silent:
             self.console.info("Current state logged\n" + key + ": " + str(value))
 
-    def log_scalars(self, key_value:dict, step:int, tag:str=None, silent:bool=False):
+    def log_scalars(
+        self, key_value: dict, step: int, tag: str = None, silent: bool = False
+    ):
         if self.inactive:
             return
         self.mf.log_metrics(key_value, step)
         if not silent:
-            self.console.info("Current state logged\n"+(f"{key} : {value}\n" for key, value in key_value.items()))
+            self.console.info(
+                "Current state logged\n"
+                + (f"{key} : {value}\n" for key, value in key_value.items())
+            )
 
-    def log_image(self, image, tag:str=None, step:int=None, format:str=None, filepath:str=None, silent:bool=False):
+    def log_image(
+        self,
+        image,
+        tag: str = None,
+        step: int = None,
+        format: str = None,
+        filepath: str = None,
+        silent: bool = False,
+    ):
         if self.inactive:
             return
         self.mf.log_image(image, filepath)
         if not silent:
             self.console.info(f"Logged an image to {self.mf.get_tracking_uri()}")
-    
-    def log_figure(self, figure, tag:str=None, step:int=None, close:bool=None, filepath:str=None, silent:bool=False):
+
+    def log_figure(
+        self,
+        figure,
+        tag: str = None,
+        step: int = None,
+        close: bool = None,
+        filepath: str = None,
+        silent: bool = False,
+    ):
         if self.inactive:
             return
         self.mf.log_figure(figure, filepath)
         if not silent:
             self.console.info(f"Logged a figure to {self.mf.get_tracking_uri()}")
 
-    def log_state(self, data:dict, timestep:int, unit:Literal['epoch', 'step'], tag:str=None, to_json:bool=None, to_xls:bool=None, silent:bool=False):
+    def log_state(
+        self,
+        data: dict,
+        timestep: int,
+        unit: Literal["epoch", "step"],
+        tag: str = None,
+        to_json: bool = None,
+        to_xls: bool = None,
+        silent: bool = False,
+    ):
 
         if not self.check_loss_policy(data, unit) or self.inactive:
             return
@@ -408,6 +517,7 @@ class MLFlowLogger(StateLogger):
             self.log_scalars(data, timestep, tag, silent=silent)
 
         super().log_state(data, timestep, unit, tag, to_json, to_xls, True)
+
 
 class TotalLogger(StateLogger):
 
@@ -430,22 +540,22 @@ class TotalLogger(StateLogger):
         return self.tb_logger
 
     def init_logger(
-            self,
-            name:str,
-            file:bool=True,
-            mlflow:bool=True,
-            remote_model_save:bool=False,
-            tensorboard:bool=True,
-            autolog:bool=False,
-            autolog_options:dict=False,
-            uri:str="",
-            experiment_id:str=None,
-            run_id:str=None,
-            experiment_name:str=None
-            ):
-        
+        self,
+        name: str,
+        file: bool = True,
+        mlflow: bool = True,
+        remote_model_save: bool = False,
+        tensorboard: bool = True,
+        autolog: bool = False,
+        autolog_options: dict = False,
+        uri: str = "",
+        experiment_id: str = None,
+        run_id: str = None,
+        experiment_name: str = None,
+    ):
+
         self.console = logging.getLogger(name)
-        
+
         self.experiment_id = experiment_id
         self.run_id = run_id
         self.file = file
@@ -461,19 +571,19 @@ class TotalLogger(StateLogger):
             if autolog:
                 self.mf_logger.autolog(**autolog_options)
             else:
-                
+
                 if experiment_id:
                     self.mf_logger.set_experiment(experiment_id=experiment_id)
                 else:
                     self.mf_logger.set_experiment(experiment_name=experiment_name)
 
                 self.mf_logger.start_run(run_id)
-                    
+
         if tensorboard:
             self.tb = __import__("torch.utils.tensorboard", fromlist=["torch.utils"])
             self.tb_logger = self.tb.SummaryWriter("tensorboard")
 
-    def log_scalar(self, key:str, value, step:int):
+    def log_scalar(self, key: str, value, step: int):
         if self.inactive:
             return
         if self.mlflow and not self.autolog:
@@ -482,7 +592,7 @@ class TotalLogger(StateLogger):
             self.tb_logger.add_scalar(key, value, step)
         self.console.info(key + ": " + value)
 
-    def log_scalars(self, key_value:dict, step:int, tag:str=None):
+    def log_scalars(self, key_value: dict, step: int, tag: str = None):
         if self.inactive:
             return
         if self.mlflow and not self.autolog:
@@ -492,7 +602,14 @@ class TotalLogger(StateLogger):
         for k, v in key_value.items():
             self.console.info(k + ": " + v)
 
-    def log_image(self, image, tag:str=None, step:int=None, format:str=None, filepath:str=None):
+    def log_image(
+        self,
+        image,
+        tag: str = None,
+        step: int = None,
+        format: str = None,
+        filepath: str = None,
+    ):
         if self.inactive:
             return
         if self.mlflow and not self.autolog:
@@ -501,8 +618,15 @@ class TotalLogger(StateLogger):
         if self.tensorboard:
             self.tb_logger.add_image(tag, image, step, format)
             self.console.info(f"Logged an image to tensorboard")
-    
-    def log_figure(self, figure, tag:str=None, step:int=None, close:bool=None, filepath:str=None):
+
+    def log_figure(
+        self,
+        figure,
+        tag: str = None,
+        step: int = None,
+        close: bool = None,
+        filepath: str = None,
+    ):
         if self.inactive:
             return
         if self.mlflow and not self.autolog:
@@ -512,6 +636,9 @@ class TotalLogger(StateLogger):
             self.tb_logger.add_figure(tag, figure, step, close)
             self.console.info(f"Logged a figure to tensorboard")
 
-def load_logger(logger_conf:DictConfig) -> Logger:
-    logger = getattr(sys.modules[__name__], logger_conf.type)(logger_conf.name, logger_conf.level, logger_conf)
+
+def load_logger(logger_conf: DictConfig) -> Logger:
+    logger = getattr(sys.modules[__name__], logger_conf.type)(
+        logger_conf.name, logger_conf.level, logger_conf
+    )
     return logger
