@@ -5,6 +5,10 @@ name = "pypi"
 
 [packages]
 eniat = {file = ".", editable = true}
+torcheval = "*"
+torch = "*"
+torchvision = "*"
+torchaudio = "*"
 
 [dev-packages]
 ipykernel = "*"

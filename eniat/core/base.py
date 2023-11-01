@@ -4,6 +4,7 @@ Each package-based components such as Trainer or Grader inherit classes from thi
 from abc import ABCMeta, abstractmethod
 from typing import TypeVar, Callable, Sequence, Union, Any, Hashable
 from .course import CourseBook
+from ..utils import load_class
 import copy
 import warnings
 from omegaconf import DictConfig
@@ -82,8 +83,8 @@ class Grader:
     ) -> None:
         self.methods = []
         self.conf = conf
-        if conf.scheme.methods:
-            self.append_metric(conf.scheme.methods)
+        if conf.scheme.metrics:
+            self.append_metric(conf.scheme.metrics)
         self.course = course
         self.learner = learner
         self.append_metric(methods)
@@ -91,11 +92,23 @@ class Grader:
         self.options = options
 
     def append_metric(self, methods: Union[Callable, Sequence[Callable]]):
-        if isinstance(methods, Callable):
-            self.methods += [methods]
+        if callable(methods):
+            self.methods.append(methods)
         elif methods is not None:
             for method in methods:
-                self.methods.append(method)
+                if callable(method):
+                    self.methods.append(method)
+                else:
+                    if isinstance(method, str):
+                        self.methods.append(load_class(_class=method))
+                    elif isinstance(method, DictConfig):
+                        self.methods.append(
+                            load_class(
+                                method.path if "path" in method else None, method.cls
+                            )
+                        )
+                    else:
+                        raise ValueError("Invalid metric")
 
     def is_enabled(self) -> bool:
         return len(self.methods) > 0
@@ -106,14 +119,13 @@ class Grader:
         result = {}
         if options is None:
             options = self.options
-        opt = 0
-        for method in self.methods:
+
+        for i, method in enumerate(self.methods):
             result[method.__name__] = (
-                method(prediction, ground_truth, options[opt])
-                if options and options[opt]
+                method(prediction, ground_truth, options[i])
+                if options and options[i]
                 else method(prediction, ground_truth)
             )
-            opt += 1
 
         return result
 

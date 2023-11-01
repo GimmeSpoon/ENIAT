@@ -8,7 +8,7 @@ from .statelogger import (
 )
 from .cli import parser, init
 from .conf import (
-    load_default_conf,
+    load_conf,
     recursive_merge,
     recursive_merge_by_path,
     import_by_file,
@@ -16,3 +16,4 @@ from .conf import (
     load_class,
 )
 from .manager import Manager
+from .style import *

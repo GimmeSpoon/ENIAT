@@ -1,6 +1,6 @@
 from typing import TypeVar, Union, Sequence, Callable, Literal
 import torch
-from torch.utils.data import DataLoader, Dataset, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler
 import torch.distributed as dist
 from torch.multiprocessing import spawn
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -24,17 +24,15 @@ from torch.distributed.optim import (
     DistributedOptimizer,
 )
 import torch.distributed.algorithms.model_averaging.averagers as averagers
-from tqdm.auto import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 from omegaconf import DictConfig
-from ..utils import Logger
+from ..utils import Logger, bar, advance, end
 import os
 import contextlib
-import warnings
 import functools
 from pathlib import Path
 import numpy as np
 import random
+from contextlib import nullcontext
 
 L = TypeVar("L", bound=Logger)
 
@@ -97,7 +95,6 @@ def distributed(fn: Callable) -> Callable:
         device=None,
         global_rank=None,
         silent=False,
-        position=0,
         final=True,
         **kwargs,
     ):
@@ -114,11 +111,9 @@ def distributed(fn: Callable) -> Callable:
                         else self.conf.env.device_id[0]
                     )
                 )
-                return fn(
-                    self, device, device, silent, position, final, **(kwargs or {})
-                )
+                return fn(self, device, device, silent, final, **(kwargs or {}))
             elif self.conf.env.type == "DP":  # DP (Data Parallel)
-                return fn(self, "cuda", 0, silent, position, final, **(kwargs or {}))
+                return fn(self, "cuda", 0, silent, final, **(kwargs or {}))
 
             if self.conf.env.debug:
                 os.environ["TORCH_CPP_LOG_LEVEL"] = "INFO"
@@ -131,7 +126,6 @@ def distributed(fn: Callable) -> Callable:
                     int(os.environ["LOCAL_RANK"]),
                     int(os.environ["RANK"]),
                     silent,
-                    position,
                     final,
                     **(kwargs or {}),
                 )
@@ -142,7 +136,6 @@ def distributed(fn: Callable) -> Callable:
                     (
                         fn.__name__,
                         silent,
-                        position,
                         final,
                         *[kwargs[key] for key in kwargs],
                     ),
@@ -151,9 +144,7 @@ def distributed(fn: Callable) -> Callable:
                 )
         else:
             if dist.get_rank() == 0:
-                return fn(
-                    self, device, global_rank, silent, position, final, **(kwargs or {})
-                )
+                return fn(self, device, global_rank, silent, final, **(kwargs or {}))
             else:
                 with contextlib.redirect_stdout(None):
                     with contextlib.redirect_stderr(None):
@@ -162,7 +153,6 @@ def distributed(fn: Callable) -> Callable:
                             device,
                             global_rank,
                             True,
-                            position,
                             final,
                             **(kwargs or {}),
                         )
@@ -174,13 +164,15 @@ class TorchPredictor:
     def __init__(self, env_configuration: DictConfig, hooks: dict = None) -> None:
         self.hooker = Hooker()
 
-    def get_loader(self, data_label: str, dataset=None) -> DataLoader:
+    def __rank0(self):
+        return dist.is_initialized() and dist.get_rank() == 0
+
+    def get_loader(self, data_label: str = None, dataset=None) -> DataLoader:
         if dataset is None:
             if isinstance(data_label, str):
                 dataset = self.course.get(data_label)
-            elif data_label:
-                for _label in data_label:
-                    self.course.get(_label)
+            else:
+                raise ValueError(f"Invalid data label: {data_label}")
         if self.conf.env.type in ENV_DIST_TYPES:
             return (
                 DataLoader(
@@ -218,8 +210,7 @@ class TorchPredictor:
         local_rank: int,
         fname: str,
         silent: bool = False,
-        position: int = 0,
-        final: bool = False,
+        final=True,
         *args,
     ) -> None:
         os.environ["LOCAL_RANK"] = str(local_rank)
@@ -234,7 +225,7 @@ class TorchPredictor:
         )
         if not local_rank:
             self.log.info("configured DDP environment...")
-        return getattr(self, fname)(local_rank, rank, silent, position, final, *args)
+        return getattr(self, fname)(local_rank, rank, silent, final, *args)
 
     def _torchrun_init(self):
         self.log.info("setting torchrun environment...")
@@ -304,7 +295,8 @@ class TorchPredictor:
 
     def load_state(self, path: str) -> None:
         resumed = torch.load(path)
-        self.learner.load_optimizer(resumed["optimizer"])
+        self.learner.resume_optimizer(resumed["scheduler"])
+        self.learner.resume_optimizer(resumed["optimizer"])
         self.conf.scheme.unit = resumed["unit"]
         self.set_rand_state(resumed["rng_state"])
         self.conf.scheme.init_step = resumed["timestep"]
@@ -317,8 +309,8 @@ class TorchPredictor:
         self,
         device: Union[int, str],
         log=None,
-        data: bool = True,
-        learner: bool = True,
+        load_data: bool = True,
+        load_learner: bool = True,
     ):
 
         # logger
@@ -331,13 +323,13 @@ class TorchPredictor:
                 log.load_rich_console()
 
         # data
-        if data:
+        if load_data:
             self.course.load()
-            self.loader = self.get_loader(self.conf.data_labels)
+            self.loader = self.get_loader(self.conf.data_label)
 
         # learner
-        if learner:
-            self.learner.load()
+        if load_learner:
+            self.learner.prepare()
             model = self.learner.model.to(device)
 
             if self.conf.env.type in ENV_DIST_TYPES:
@@ -398,21 +390,21 @@ class TorchPredictor:
                 log.warning(f"Model checkpoint not resumed.")
 
             _res = True
-            if self.conf.resume_path is not None:
+            if "resume_path" in self.conf and self.conf.resume_path is not None:
                 if isinstance(self.conf.resume_path, str):
                     resume_path = Path(self.conf.resume_path)
                 if resume_path.is_file():
-                    self.learner.load_opt(path=resume_path)
+                    self.learner.resume_optimizer(path=resume_path)
                 else:
                     raise FileNotFoundError(
                         f"No checkpoint(optimizer) exists: {resume_path.absolute()}"
                     )
                 log.info(f"Training states resumed from {self.conf.resume_path}.")
-            elif self.conf.resume_dir:
+            elif "resume_dir" in self.conf and self.conf.resume_dir:
                 if isinstance(self.conf.resume_dir, str):
                     resume_dir = Path(self.conf.resume_dir)
                 if resume_dir.is_dir():
-                    self.learner.load_opt(
+                    self.learner.resume_optimizer(
                         path=resume_dir.joinpath(f"state_{self.conf.resume_step}.cpt")
                     )
                 log.info(
@@ -446,38 +438,30 @@ class TorchPredictor:
         device: Union[int, str],
         global_rank: int = None,
         silent: bool = False,
-        position=0,
         final: bool = True,
-        data_label: str = "predict",
-        skip_prepare: bool = False,
+        msg: str = "Inferencing...",
     ):
-        if not skip_prepare:
+        if final:
             self.prepare(device, self.log)
 
         ret = []
         gt = []
         y = None
 
-        with logging_redirect_tqdm():
-            for batch in (
-                step_bar := tqdm(
-                    self.loader,
-                    desc="Inference",
-                    unit="step",
-                    position=position,
-                    leave=False,
-                    disable=silent,
-                )
-            ):
+        with bar("eval", total_steps=len(self.loader), msg=msg) if (
+            not dist.is_initialized() or dist.get_rank() == 0
+        ) else nullcontext():
 
-                batch = to_tensor(batch, self.dtype, device)
+            for _, batch in enumerate(self.loader):
+
+                batch = to_tensor(batch, self.conf.scheme.dtype, device)
                 if isinstance(batch, list):
-                    y = batch[1].cpu()
+                    y = batch[1].to(device)
                     batch = batch[0]
                 self.learner.to(device)
                 self.learner.eval()
                 with torch.no_grad():
-                    if self.precision is None:
+                    if self.conf.scheme.precision is None:
                         pred = self.learner.predict(batch, device, self.log)
                     else:
                         with torch.autocast(
@@ -508,12 +492,14 @@ class TorchPredictor:
                             dist.gather(y)
                             dist.barrier()
 
-        self.hooker.pull("after_epoch")
+                if not dist.is_initialized() or dist.get_rank() == 0:
+                    advance("eval")
 
         if not dist.is_initialized() or dist.get_rank() == 0:
-            ret = torch.cat(ret).squeeze().numpy()
+            end("eval", not final)
+            ret = torch.cat(ret).squeeze()
             if len(gt):
-                gt = torch.cat(gt).squeeze().numpy()
+                gt = torch.cat(gt).squeeze()
             else:
                 gt = None
         else:

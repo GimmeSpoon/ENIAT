@@ -8,10 +8,10 @@ def console():
     conf = init()
     logger = load_logger(conf.logger)
     course = CourseBook(conf=conf.data)
-    logger.info(f"Task {conf.task} requested using package {conf.package}")
+    logger.info(f"Task '{conf.task}' requested using package {conf.package}")
     try:
         if conf.package == "sklearn":
-            logger.critical("scikit-learn is not yet supported. dumbass")
+            logger.critical("scikit-learn is not yet supported.")
         elif conf.package == "torch":
             from .torch import SupervisedLearner, load_learner
 
@@ -21,7 +21,7 @@ def console():
                 # load learner, trainer, grader
                 from .torch import load_grader, load_trainer
 
-                grader = load_grader(conf.grader, logger)
+                grader = load_grader(conf.grader, logger, course, learner)
                 trainer = load_trainer(conf.trainer, logger, grader, course, learner)
                 trainer.fit()
 

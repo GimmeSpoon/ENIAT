@@ -1,27 +1,12 @@
-from typing import TypeVar, Generic, Union, Literal, Any
+from typing import TypeVar, Generic, Union, Any
 from abc import abstractmethod
 from ..core import Learner
 import torch
-import torch.nn as nn
 from torch import Tensor
 from torch.nn import Module
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp.wrap import (
-    always_wrap_policy,
-    size_based_auto_wrap_policy,
-    lambda_auto_wrap_policy,
-    transformer_auto_wrap_policy,
-    enable_wrap,
-    wrap,
-)
-from torch.nn import DataParallel as DP
 from torch.optim import Optimizer
 from ..utils import instantiate, Logger, load_class
-from importlib import import_module
-import os
 from omegaconf import DictConfig
-import functools
 from pathlib import Path
 
 T_co = TypeVar("T_co", covariant=True)
@@ -122,7 +107,7 @@ class TorchLearner(Learner, Generic[T_co]):
     def predict(self, batch: Tensor, device: int, logger):
         pass
 
-    def load(self, log: L = None) -> None:
+    def prepare(self, log: L = None) -> None:
         self.model, self.loss_fn, self.opt, self.sch = instantiate_learner(
             self.conf, log, as_tuple=True
         )
@@ -140,6 +125,13 @@ class TorchLearner(Learner, Generic[T_co]):
         else:
             with open(path, "rb") as f:
                 self.opt.load_state_dict(torch.load(f)["optimizer"])
+
+    def resume_scheduler(self, state=None, path: Union[str, Path] = None) -> None:
+        if state:
+            self.sch.load_state_dict(state)
+        else:
+            with open(path, "rb") as f:
+                self.sch.load_state_dict(torch.load(f)["scheduler"])
 
     def resume(self) -> bool:
         if self.conf.resume_path:

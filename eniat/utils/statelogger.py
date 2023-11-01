@@ -4,8 +4,7 @@ just like builtin package 'logging', but also it can log to files or
 other tools such as Tensorboard or MLFlow."""
 
 import logging
-from logging import Formatter, StreamHandler
-from logging.handlers import RotatingFileHandler
+from logging import Formatter, LogRecord, StreamHandler
 from datetime import datetime
 from typing import Callable, Literal, TypeVar, Union, Any
 from pathlib import Path
@@ -17,17 +16,15 @@ from openpyxl import Workbook
 from abc import abstractmethod
 import os
 import sys
-from rich.logging import RichHandler
 from rich.traceback import install
-from rich.table import Table
 from rich.console import Console
-from rich.text import Text
+from .style import init_display, LogHandler, PreLogHandler, LogFileHandler
+from datetime import datetime
 
 install(show_locals=True)
 
-_FILE_FORMAT = "[%(asctime)s][%(name)s][%(levelname)s] %(message)s"
-_STRM_FORMAT = "%(message)s"
-_DATE_FORMAT = "%y-%m-%d %H:%M:%S"
+FILE_HND_MAX_BYTES = 10_485_760
+FILE_HND_BCK_COUONT = 1
 
 T_co = TypeVar("T_co", covariant=True)
 
@@ -93,21 +90,20 @@ class DummyLogger(Logger):
 
         if isinstance(logging_dir, str):
             logging_dir = Path(logging_dir)
+
+        self.logging_dir = logging_dir
+
         logging_dir.mkdir(parents=True, exist_ok=True)
 
-        file_format = Formatter(_FILE_FORMAT, _DATE_FORMAT)
-        strm_format = Formatter(_STRM_FORMAT, _DATE_FORMAT)
-
-        file_handler = RotatingFileHandler(
-            logging_dir.joinpath("eniat.log"),
-            maxBytes=10_485_760,
-            backupCount=1,
-        )
-        file_handler.setFormatter(file_format)
-        rich_handler = RichHandler(
+        rich_handler = PreLogHandler(
             rich_tracebacks=True, show_path=False, tracebacks_suppress=[]
         )
-        rich_handler.setFormatter(strm_format)
+
+        file_handler = LogFileHandler(
+            logging_dir.joinpath("eniat.log"),
+            maxBytes=FILE_HND_MAX_BYTES,
+            backupCount=1,
+        )
 
         logging.basicConfig(level=level, handlers=[rich_handler, file_handler])
         self.console = logging.getLogger(name)
@@ -115,6 +111,17 @@ class DummyLogger(Logger):
 
     def load_rich_console(self) -> None:
         self.rich_console = Console()
+        init_display(self.rich_console, self.silent)
+        file_handler = LogFileHandler(
+            self.logging_dir.joinpath("eniat.log"),
+            maxBytes=FILE_HND_MAX_BYTES,
+            backupCount=1,
+        )
+        logging.basicConfig(
+            level=self.level,
+            handlers=[LogHandler(self.level), file_handler],
+            force=True,
+        )
 
     def be_silent(self) -> None:
         self.silent = True
@@ -166,28 +173,29 @@ class StateLogger(DummyLogger):
         def __init__(self) -> None:
             self.__state = {}
             self.__e = self.__state["epoch"] = {}
+            self.__s = self.__state["step"] = {}
             self.__n = self.__state["global"] = []
 
         def add(self, data: dict, epoch: int = None, step: int = None) -> None:
-            if "epoch" in data:
-                _e = data.pop("epoch")
-                if "step" in data:
-                    _s = data.pop("step")
-                    if _e in self.__e:
-                        self.__e[_e][_s] = data
-                    else:
-                        self.__e[_e] = {_s: data}
+            if epoch is None:
+                if step is None:
+                    self.__n.append(data)
                 else:
-                    if _e in self.__e:
-                        self.__e[_e]["epoch-state"].append(data)
+                    if step in self.__s:
+                        self.__s[step].append(data)
                     else:
-                        self.__e[_e] = {
-                            "epoch-state": [
-                                data,
-                            ]
-                        }
+                        self.__s[step] = [data]
             else:
-                self.__n.append(data)
+                if not epoch in self.__e:
+                    self.__e[epoch] = {"data": []}
+
+                if step is None:
+                    self.__e[epoch]["data"].append(data)
+                else:
+                    if step in self.__e[epoch]:
+                        self.__e[epoch][step].append(data)
+                    else:
+                        self.__e[epoch][step] = [data]
 
         def get(self) -> T_co:
             pass
@@ -242,7 +250,7 @@ class StateLogger(DummyLogger):
         return self.console.findCaller(stack_info, stacklevel)
 
     def check_loss_policy(self, _t: int, _u: str) -> bool:
-        if _t == None and _u == None:
+        if _t == None or _u == None or self.conf.log_interval == 0:
             return True
         return (_u == self.conf.unit) and (_t % self.conf.log_interval) == 0
 
@@ -253,21 +261,23 @@ class StateLogger(DummyLogger):
     def log_state(
         self,
         data: dict,
-        timestep: int = None,
-        unit: Literal["epoch", "step"] = None,
+        epoch: int = None,
+        step: int = None,
+        unit: Literal["epoch", "step"] = "epoch",
+        training_state: bool = True,
         to_json: bool = None,
         to_xls: bool = None,
         to_csv: bool = None,
         silent: bool = False,
-        table: bool = False,
     ):
-        if not self.check_loss_policy(timestep, unit) or self.inactive:
+
+        if (
+            not self.check_loss_policy(epoch if unit == "epoch" else step, unit)
+            or self.inactive
+        ):
             return
 
-        if unit == "epoch":
-            self.state.add(data, epoch=timestep)
-        if unit == "step":
-            self.state.add(data, step=timestep)
+        self.__state.add(data, epoch, step)
 
         if to_json if to_json is not None else self.conf.json:
             self.__state.to_json(
@@ -279,30 +289,16 @@ class StateLogger(DummyLogger):
             raise NotImplementedError("Sorry, csv is not supported yet.")
 
         if not silent:
-            if table:
-                if len(data) == 1:
-                    table = Table(
-                        data.keys()[0],
-                        data.values()[0],
-                        title=f"Training State ({unit.capitalize()} {timestep})",
-                    )
-                else:
-                    table = Table(
-                        "State",
-                        "Value",
-                        title=f"Training State ({unit.capitalize()} {timestep})",
-                    )
-                    for item in data.items():
-                        table.add_row(item[0], str(item[1]))
-                with self.rich_console.capture() as cap:
-                    self.rich_console.print(table)
-                _str = cap.get()
-                self.info(_str, extra={"markup": True})
-            else:
-                _str = f"Training State ({unit.capitalize()} {timestep})\n" + "\n".join(
-                    [f"[green]{item[0]}[/] : {item[1]}" for item in data.items()]
+            _str = (
+                f"{'Training State' if training_state else 'Evaluation Result'} ({unit.capitalize()} {epoch if unit=='epoch' else step})\n"
+                + "\n".join(
+                    [
+                        f"                       {item[0]} : {item[1]}"
+                        for item in data.items()
+                    ]
                 )
-                self.info(_str, extra={"markup": True})
+            )
+            self.info(_str, extra={"markup": True})
 
 
 class TensorboardLogger(StateLogger):

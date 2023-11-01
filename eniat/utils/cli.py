@@ -1,7 +1,7 @@
 # from typing import
 from omegaconf import OmegaConf, DictConfig
 from pathlib import Path
-from .conf import recursive_merge, recursive_merge_by_path, load_default_conf
+from .conf import recursive_merge, recursive_merge_by_path, load_conf
 import argparse
 from datetime import datetime
 
@@ -46,7 +46,7 @@ parser.add_argument(
 
 def init() -> tuple:
     main_args, cli_args = parser.parse_known_args()
-    default_conf = load_default_conf()
+    default_conf = load_conf()
     user_conf = None
     if main_args.config:
         user_conf = recursive_merge_by_path(*main_args.config)

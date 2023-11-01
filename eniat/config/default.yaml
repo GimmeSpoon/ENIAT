@@ -1,15 +1,15 @@
 task:
 package:
 output_dir:
-spinner:
 
 logger:
   name: eniat
   logging_dir: ./
   type: DummyLogger
   level: 10
+  log_interval: 1
+  unit:
   silent: False
-  training_loss: True
   json: False
   xls: False
   csv: False
@@ -52,7 +52,7 @@ learner:
     options:
 
 trainer:
-  data_labels:
+  data_label:
   output_dir: ./
   resume_path:
   resume_dir:
@@ -62,6 +62,7 @@ trainer:
     max_step:
     seed:
     unit:
+    update_interval:
     save_interval:
     save_after_eval: False
     compile: False
@@ -93,9 +94,9 @@ trainer:
       fsdp_policy_options:
 
 grader:
-  data_labels:
+  data_label:
   scheme:
-    methods:
+    metrics:
     init_step: 0
     max_step:
     seed:
