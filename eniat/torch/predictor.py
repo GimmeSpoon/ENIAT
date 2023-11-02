@@ -1,38 +1,27 @@
-from typing import TypeVar, Union, Sequence, Callable, Literal
-import torch
-from torch.utils.data import DataLoader, DistributedSampler
-import torch.distributed as dist
-from torch.multiprocessing import spawn
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.nn import DataParallel as DP
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp.fully_sharded_data_parallel import (
-    CPUOffload,
-    BackwardPrefetch,
-)
-from torch.distributed.fsdp.wrap import (
-    always_wrap_policy,
-    size_based_auto_wrap_policy,
-    lambda_auto_wrap_policy,
-    transformer_auto_wrap_policy,
-    enable_wrap,
-    wrap,
-)
-from torch.distributed.optim import (
-    PostLocalSGDOptimizer,
-    ZeroRedundancyOptimizer,
-    DistributedOptimizer,
-)
-import torch.distributed.algorithms.model_averaging.averagers as averagers
-from omegaconf import DictConfig
-from ..utils import Logger, bar, advance, end
-import os
 import contextlib
 import functools
-from pathlib import Path
-import numpy as np
+import os
 import random
 from contextlib import nullcontext
+from pathlib import Path
+from typing import Callable, Sequence, TypeVar, Union
+
+import numpy as np
+import torch
+import torch.distributed as dist
+import torch.distributed.algorithms.model_averaging.averagers as averagers
+from omegaconf import DictConfig
+from torch.distributed.optim import (
+    DistributedOptimizer,
+    PostLocalSGDOptimizer,
+    ZeroRedundancyOptimizer,
+)
+from torch.multiprocessing import spawn
+from torch.nn import DataParallel as DP
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader, DistributedSampler
+
+from ..utils import Logger, advance, bar, end
 
 L = TypeVar("L", bound=Logger)
 
@@ -254,7 +243,8 @@ class TorchPredictor:
         if method is None or method == "none":
             return opt
         raise ValueError(
-            f'Distributed optimizer "{method}" is not valid. Configure as one of following choices:[zero, postlocal]'
+            f'Distributed optimizer "{method}" is not valid.'
+            "Configure as one of following choices:[zero, postlocal]"
         )
 
     def rand_all(self, seed) -> None:
@@ -291,7 +281,7 @@ class TorchPredictor:
         torch.backends.cudnn.benchmark = False
         np.random.set_state(state["numpy"])
         random.setstate(state["random"])
-        self.log.debug(f"Random state set.")
+        self.log.debug("Random state set.")
 
     def load_state(self, path: str) -> None:
         resumed = torch.load(path)
@@ -334,6 +324,21 @@ class TorchPredictor:
 
             if self.conf.env.type in ENV_DIST_TYPES:
                 if self.conf.env.type == "FSDP":
+
+                    from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+                    from torch.distributed.fsdp.fully_sharded_data_parallel import (
+                        BackwardPrefetch,
+                        CPUOffload,
+                    )
+                    from torch.distributed.fsdp.wrap import (
+                        always_wrap_policy,
+                        enable_wrap,
+                        lambda_auto_wrap_policy,
+                        size_based_auto_wrap_policy,
+                        transformer_auto_wrap_policy,
+                        wrap,
+                    )
+
                     if self.conf.env.dist.fsdp_policy:
                         if self.conf.env.dist.fsdp_policy == "always":
                             policy = functools.partial(
@@ -356,9 +361,12 @@ class TorchPredictor:
                                 **self.conf.env.dist.fsdp_policy_options,
                             )
                         self.learner.model = (
-                            torch.compile(FSDP(model, fsdp_auto_wrap_policy=policy))
+                            torch.compile(FSDP(model, auto_wrap_policy=policy))
                             if self.conf.scheme.compile
-                            else FSDP(model, fsdp_auto_wrap_policy=policy)
+                            else FSDP(
+                                model,
+                                auto_wrap_policy=policy,
+                            )
                         )
                     else:
                         self.learner.model = (
@@ -387,7 +395,7 @@ class TorchPredictor:
 
             # Resuming
             if not self.learner.resume():
-                log.warning(f"Model checkpoint not resumed.")
+                log.warning("Model checkpoint not resumed.")
 
             _res = True
             if "resume_path" in self.conf and self.conf.resume_path is not None:
@@ -465,7 +473,8 @@ class TorchPredictor:
                         pred = self.learner.predict(batch, device, self.log)
                     else:
                         with torch.autocast(
-                            torch.device(device), dtype=getattr(torch, self.precision)
+                            torch.device(device),
+                            dtype=getattr(torch, self.precision),
                         ):
                             pred = self.learner.predict(batch, device, self.log)
 

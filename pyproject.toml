@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eniat"
-version = "0.0.0a2"
+version = "0.0.0"
 license = {file = "LICENSE"}
 authors = [
     {name = "GimmeSpoon", email="skcjfdnd1996@gmail.com"}
@@ -15,6 +15,12 @@ requires-python = ">=3.8"
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
@@ -39,3 +45,9 @@ dependencies = [
 
 [project.scripts]
 eniat = "eniat.entry:console"
+
+[tool.black]
+target-version = ["py38", "py39", "py310", "py311"]
+
+[tool.isort]
+profile = "black"

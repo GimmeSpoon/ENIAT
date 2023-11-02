@@ -1,9 +1,12 @@
 # from typing import
-from omegaconf import OmegaConf, DictConfig
-from pathlib import Path
-from .conf import recursive_merge, recursive_merge_by_path, load_conf
 import argparse
 from datetime import datetime
+from importlib.metadata import version
+from pathlib import Path
+
+from omegaconf import DictConfig, OmegaConf
+
+from .conf import load_conf, recursive_merge, recursive_merge_by_path
 
 
 def datetime_to_str() -> str:
@@ -19,8 +22,14 @@ parser = argparse.ArgumentParser(
     exit_on_error=False,
 )
 
+parser.add_argument("-v", "--version", action="store_true")
+
 parser.add_argument(
-    "-p", "--package", type=str, choices=["torch", "sklearn"], help="Based package"
+    "-p",
+    "--package",
+    type=str,
+    choices=["torch", "sklearn"],
+    help="Based package",
 )
 parser.add_argument("-t", "--task", choices=MLTASK)
 parser.add_argument(
@@ -36,16 +45,25 @@ parser.add_argument(
     "-o",
     "--output_dir",
     type=Path,
-    default=Path(f"./checkpoints"),
+    default=Path("./checkpoints"),
     help="Output directory",
 )
 parser.add_argument(
-    "-l", "--logging_dir", type=Path, default=Path(f"./"), help="Logging directory"
+    "-l",
+    "--logging_dir",
+    type=Path,
+    default=Path("./"),
+    help="Logging directory",
 )
 
 
 def init() -> tuple:
     main_args, cli_args = parser.parse_known_args()
+
+    if main_args.version:
+        print("eniat", version("eniat"))
+        return
+
     default_conf = load_conf()
     user_conf = None
     if main_args.config:
