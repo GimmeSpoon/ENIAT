@@ -7,7 +7,7 @@ name = "eniat"
 version = "0.0.0"
 license = {file = "LICENSE"}
 authors = [
-    {name = "GimmeSpoon", email="skcjfdnd1996@gmail.com"}
+    {name = "Cheol Woong Na", email="skcjfdnd1996@gmail.com"}
 ]
 description = "ENIAT supports and boosts your machine learning experiments!"
 readme = "README.md"
