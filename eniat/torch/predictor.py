@@ -356,7 +356,7 @@ class TorchPredictor:
                                 **self.conf.env.dist.fsdp_policy_options,
                             )
                         self.learner.model = (
-                            torch.compile(FSDP(model), fsdp_auto_wrap_policy=policy)
+                            torch.compile(FSDP(model, fsdp_auto_wrap_policy=policy))
                             if self.conf.scheme.compile
                             else FSDP(model, fsdp_auto_wrap_policy=policy)
                         )
