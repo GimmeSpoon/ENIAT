@@ -1,10 +1,10 @@
 task:
 package:
-output_dir:
+output_dir: ./
 
 logger:
   name: eniat
-  logging_dir: ./
+  logging_dir: ${output_dir}
   type: DummyLogger
   level: 10
   log_interval: 1
@@ -53,7 +53,7 @@ learner:
 
 trainer:
   data_label:
-  output_dir: ./
+  output_dir: ${output_dir}
   resume_path:
   resume_dir:
   resume_step:
@@ -69,6 +69,7 @@ trainer:
     precision:
     dtype:
     gradient_scale: False
+    save_inference: False
   loader:
     batch_size:
     shuffle: False
@@ -94,6 +95,7 @@ trainer:
       fsdp_policy_options:
 
 grader:
+  output_dir: ${output_dir}
   data_label:
   scheme:
     metrics:
@@ -106,6 +108,7 @@ grader:
     precision:
     dtype:
     gradient_scale: False
+    save_inference: False
   loader:
     batch_size:
     shuffle: False

@@ -168,7 +168,7 @@ def progress_bar(spinner: str, **kwargs):
         TimeRemainingColumn(),
         **kwargs,
         refresh_per_second=REFRESH_FREQ,
-        transient=True,
+        expand=True,
     )
 
 
@@ -209,7 +209,7 @@ def init_display(console: Console = None, silent: bool = False):
 
     ebar = progress1.add_task("Epoch", visible=False)
     sbar = progress1.add_task("Update Step", visible=False)
-    vbar = progress2.add_task("Evaluation", visible=False)
+    vbar = progress2.add_task("Inference", visible=False)
 
     return console
 
@@ -259,16 +259,16 @@ def reset(bar_type: Literal["epoch", "step", "eval"], steps: int = 0) -> None:
 
 def end(task: Literal["train", "eval"], restore: bool = False):
     if task == "train":
-        status.update("Completed!")
+        status.update(f"Completed!", spinner="smiley")
         progress1.stop()
-        progress1.update(ebar, visible=False)
-        progress1.update(sbar, visible=False)
+        progress2.stop()
     else:
         progress2.stop()
-        progress2.update(vbar, visible=False)
         if restore:
+            progress2.update(vbar, visible=False)
             status.update("Training...")
             progress1.update(ebar, visible=True)
             progress1.update(sbar, visible=True)
         else:
-            status.update("Completed!")
+            progress1.stop()
+            status.update("Completed!", spinner="smiley")

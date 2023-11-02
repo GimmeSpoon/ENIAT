@@ -1,0 +1,75 @@
+task: infer
+package: torch
+
+logger:
+  name: eniat
+  logging_dir: ./
+  type: StateLogger
+  level: 20
+  unit: epoch
+  json: True
+
+data:
+  rand:
+    path: ./test/model_torch.py
+    cls: RandDataset
+    cache: False
+    transform:
+    options:
+      total: 92333
+      _hidden: 32
+      _gt: 1
+  rand2:
+    path: ./test/model_torch.py
+    cls: RandDataset
+    cache: False
+    transform:
+    options:
+      total: 1000
+      _hidden: 32
+      _gt: 1
+
+learner:
+  cls: torch.SupervisedLearner
+  path:
+  model:
+    cls: SimpleLinear
+    path: ./test/model_torch.py
+    options:
+      __args__: [12, 32, 4096, 1]
+  loss:
+    cls: torch.nn.MSELoss
+    path:
+    options:
+  optimizer:
+    cls: torch.optim.SGD
+    path:
+    options:
+      lr: 0.0001
+  scheduler:
+    cls:
+    path:
+    options:
+
+grader:
+  data_label: rand2
+  scheme:
+    metrics:
+      - {cls: torcheval.metrics.functional.mean_squared_error}
+    unit: epoch
+    eval_interval: 1
+  loader:
+    batch_size: 100
+    shuffle: False
+    num_workers: 0
+    pin_memory: False
+  env:
+    type: DDP
+    device_id: 0
+    dist:
+      global_rank: 0
+      local_size: 4
+      world_size: 4
+      master_port: 8888
+      backend: nccl
+      optimizer: zero
