@@ -508,4 +508,9 @@ class TorchPredictor:
         if dist.is_initialized() and final:
             dist.destroy_process_group()
 
+        if self.conf.scheme.save_inference:
+            _dir = Path(self.conf.output_dir)
+            torch.save(ret, _dir.joinpath(f"{self.conf.data_label}_inference.pkl"))
+            self.log.info("Saved inference result.")
+
         return (ret, gt)

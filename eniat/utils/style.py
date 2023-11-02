@@ -161,7 +161,7 @@ def progress_bar(spinner: str, **kwargs):
     return Progress(
         TextColumn("{task.description}"),
         SpinnerColumn(spinner),
-        BarColumn(),
+        BarColumn(bar_width=None),
         TaskProgressColumn(),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
