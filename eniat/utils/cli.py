@@ -52,10 +52,8 @@ parser.add_argument(
     "-l",
     "--logging_dir",
     type=Path,
-    default=Path("./"),
     help="Logging directory",
 )
-
 
 def init() -> tuple:
     main_args, cli_args = parser.parse_known_args()
@@ -70,7 +68,7 @@ def init() -> tuple:
         user_conf = recursive_merge_by_path(*main_args.config)
     cli_conf = OmegaConf.from_dotlist(cli_args)
 
-    conf = recursive_merge(default_conf, cli_conf, user_conf or OmegaConf.create({}))
+    conf = recursive_merge(default_conf, user_conf, cli_conf or OmegaConf.create({}))
 
     (
         conf.package,
@@ -83,6 +81,9 @@ def init() -> tuple:
         main_args.task or conf.task,
         main_args.output_dir,
         main_args.silent,
-        main_args.logging_dir,
+        main_args.logging_dir or main_args.output_dir,
     )
+
+    OmegaConf.resolve(conf)
+
     return conf

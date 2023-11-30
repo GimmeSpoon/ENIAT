@@ -28,6 +28,7 @@ FILE_HND_BCK_COUONT = 1
 
 T_co = TypeVar("T_co", covariant=True)
 
+g_logger = None
 
 class Logger:
     @abstractmethod
@@ -110,8 +111,7 @@ class DummyLogger(Logger):
         self.rich_console = None
 
     def load_rich_console(self) -> None:
-        self.rich_console = Console()
-        init_display(self.rich_console, self.silent)
+        self.rich_console = init_display(silent=self.silent)
         file_handler = LogFileHandler(
             self.logging_dir.joinpath("eniat.log"),
             maxBytes=FILE_HND_MAX_BYTES,
@@ -325,23 +325,26 @@ class TensorboardLogger(StateLogger):
     def log_state(
         self,
         data: dict,
-        timestep: int,
-        unit: Literal["epoch", "step"],
-        tag: str = None,
-        to_json: bool = None,
-        to_xls: bool = None,
+        epoch: int = None,
+        step: int = None,
+        unit: Literal["epoch", "step"] = "epoch",
+        training_state: bool = True,
+        to_json: bool = False,
+        to_xls: bool = False,
+        to_csv: bool = False,
         silent: bool = False,
     ):
 
-        if not self.check_loss_policy(data, unit) or self.inactive:
+        if not self.check_loss_policy(epoch if unit == "epoch" else step, unit) or self.inactive:
             return
         if len(data) == 1:
             data = list(data.items())[0]
-            self.log_scalar(data[0], data[1], timestep, silent=silent)
+            self.log_scalar(data[0], data[1], epoch if unit == "epoch" else step, silent=silent)
         elif len(data) > 1:
-            self.log_scalars(data, timestep, tag, silent=silent)
+            tag = "Trainig state" if training_state else "Evaluation Result"
+            self.log_scalars(data, epoch if unit == "epoch" else step, tag, silent=silent)
 
-        super().log_state(data, timestep, unit, tag, to_json, to_xls, silent=True)
+        super().log_state(data, epoch, step, unit, training_state, to_json, to_xls, to_csv, silent=True)
 
     def log_scalar(self, key: str, value, step: int, silent: bool = False):
         if self.inactive:
@@ -359,7 +362,7 @@ class TensorboardLogger(StateLogger):
         if not silent:
             self.console.info(
                 "Current state logged\n"
-                + (f"{key} : {value}\n" for key, value in key_value.items())
+                + str(f"{key} : {value}\n" for key, value in key_value.items())
             )
 
     def log_image(
@@ -496,11 +499,13 @@ class MLFlowLogger(StateLogger):
     def log_state(
         self,
         data: dict,
-        timestep: int,
-        unit: Literal["epoch", "step"],
-        tag: str = None,
-        to_json: bool = None,
-        to_xls: bool = None,
+        epoch: int = None,
+        step: int = None,
+        unit: Literal["epoch", "step"] = "epoch",
+        training_state: bool = True,
+        to_json: bool = False,
+        to_xls: bool = False,
+        to_csv: bool = False,
         silent: bool = False,
     ):
 
@@ -508,11 +513,11 @@ class MLFlowLogger(StateLogger):
             return
         if len(data) == 1:
             data = list(data.items())[0]
-            self.log_scalar(data[0], data[1], timestep, silent=silent)
+            self.log_scalar(data[0], data[1], epoch if unit == "epoch" else step, silent=silent)
         elif len(data) > 1:
-            self.log_scalars(data, timestep, tag, silent=silent)
+            self.log_scalars(data, epoch if unit == "epoch" else step, "Training State" if training_state else "Evaluation Result", silent=silent)
 
-        super().log_state(data, timestep, unit, tag, to_json, to_xls, True)
+        super().log_state(data, epoch, step, unit, training_state, to_json, to_xls, to_csv, True)
 
 
 class TotalLogger(StateLogger):
@@ -638,3 +643,23 @@ def load_logger(logger_conf: DictConfig) -> Logger:
         logger_conf.name, logger_conf.level, logger_conf
     )
     return logger
+
+def init_logger(
+        log_cls = StateLogger,
+        conf:DictConfig = None,
+        **kwargs
+    ) -> Logger:
+    global g_logger
+    if g_logger is not None:
+        if isinstance(g_logger, log_cls):
+            return g_logger
+        else:
+            g_logger = None
+    if conf is not None:
+        g_logger = load_logger(conf)
+    else:
+        g_logger = log_cls(**kwargs)
+    return g_logger
+    
+def get_logger() -> Logger:
+    return g_logger or init_logger()

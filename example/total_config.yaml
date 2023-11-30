@@ -29,7 +29,7 @@ logger:
 data:
 
 learner:
-  cls: SupervisedLearner
+  cls:
   path:
   resume_path:
   resume_dir:
@@ -38,13 +38,6 @@ learner:
     cls:
     path:
     options:
-
-trainer:
-  data_label:
-  output_dir: ${output_dir}
-  resume_path:
-  resume_dir:
-  resume_step:
   loss:
     cls:
     path:
@@ -57,10 +50,16 @@ trainer:
     cls:
     path:
     options:
+
+trainer:
+  data_label:
+  output_dir: ${output_dir}
+  resume_path:
+  resume_dir:
+  resume_step:
   scheme:
-    warmup_iters:
-    init_iter: 0
-    total_iters:
+    init_step: 0
+    max_step:
     seed:
     unit:
     update_interval:
@@ -83,7 +82,7 @@ trainer:
     device_id: 0
     dist:
       local_rank:
-      global_rank: 0
+      global_rank:
       local_size:
       world_size:
       init_method: env://
@@ -100,8 +99,8 @@ grader:
   data_label:
   scheme:
     metrics:
-    init_iter: 0
-    total_iters:
+    init_step: 0
+    max_step:
     seed:
     unit:
     eval_interval:

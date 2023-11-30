@@ -21,7 +21,7 @@ from torch.nn import DataParallel as DP
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 
-from ..utils import Logger, advance, bar, end
+from ..utils import Logger, advance, bar, end, instantiate
 
 L = TypeVar("L", bound=Logger)
 
@@ -206,15 +206,23 @@ class TorchPredictor:
         os.environ["MASTER_ADDR"] = self.conf.env.dist.master_address
         os.environ["MASTER_PORT"] = str(self.conf.env.dist.master_port)
         rank = self.conf.env.dist.global_rank + local_rank
+        dev_id = 0
+        if self.conf.env.device_id is not None:
+            if isinstance(self.conf.env.device_id, list):
+                dev_id = self.conf.env.device_id[local_rank]
+            else:
+                dev_id = local_rank + self.conf.env.device_id
+        else:
+            dev_id = local_rank
         dist.init_process_group(
             backend=self.conf.env.dist.backend,
             init_method=self.conf.env.dist.init_method,
             world_size=self.conf.env.dist.world_size,
             rank=rank,
         )
-        if not local_rank:
+        if local_rank == 0:
             self.log.info("configured DDP environment...")
-        return getattr(self, fname)(local_rank, rank, silent, final, *args)
+        return getattr(self, fname)(dev_id, rank, silent, final, *args)
 
     def _torchrun_init(self):
         self.log.info("setting torchrun environment...")
@@ -283,17 +291,36 @@ class TorchPredictor:
         random.setstate(state["random"])
         self.log.debug("Random state set.")
 
-    def load_state(self, path: str) -> None:
+    def load_state(self, path: str, force:bool=False) -> None:
         resumed = torch.load(path)
-        self.learner.resume_optimizer(resumed["scheduler"])
-        self.learner.resume_optimizer(resumed["optimizer"])
-        self.conf.scheme.unit = resumed["unit"]
+        if resumed["scheduler"]:
+            self.resume_scheduler(resumed["scheduler"])
+        self.resume_optimizer(resumed["optimizer"])
         self.set_rand_state(resumed["rng_state"])
-        self.conf.scheme.init_step = resumed["timestep"]
-        self.conf.scheme.batch_size = resumed["batch_size"]
-        self.conf.scheme.max_step = resumed["maxstep"]
+        if force or not self.conf.scheme.unit:
+            self.conf.scheme.unit = resumed["unit"]
+        if force or not self.conf.scheme.init_iter:
+            self.conf.scheme.init_iter = resumed["timestep"]
+        if force or not self.conf.loader.batch_size:
+            self.conf.scheme.batch_size = resumed["batch_size"]
+        if force or not self.conf.loader.total_iters:
+            self.conf.scheme.total_iters = resumed["total_iters"]
         self.conf.env = resumed["env"]
         self.log.debug("Random state loaded.")
+
+    def resume_optimizer(self, state_dict=None, path:Union[str, Path]=None) -> None:
+        if state_dict:
+            self.opt.load_state_dict(state_dict)
+        else:
+            with open(path, "rb") as f:
+                self.opt.load_state_dict(torch.load(f)["optimizer"])
+
+    def resume_scheduler(self, state_dict=None, path: Union[str, Path] = None) -> None:
+        if state_dict:
+            self.sch.load_state_dict(state_dict)
+        else:
+            with open(path, "rb") as f:
+                self.sch.load_state_dict(torch.load(f)["scheduler"])
 
     def prepare(
         self,
@@ -311,16 +338,20 @@ class TorchPredictor:
                 log.be_inactive()
             else:
                 log.load_rich_console()
+        log.debug("Logger ready.")
 
         # data
         if load_data:
             self.course.load()
             self.loader = self.get_loader(self.conf.data_label)
+            self.conf.scheme.batch_per_update = len(self.loader)
+        log.debug("Data ready.")
 
         # learner
         if load_learner:
             self.learner.prepare()
             model = self.learner.model.to(device)
+            log.debug("Model loaded.")
 
             if self.conf.env.type in ENV_DIST_TYPES:
                 if self.conf.env.type == "FSDP":
@@ -380,6 +411,7 @@ class TorchPredictor:
                         if self.conf.scheme.compile
                         else DDP(model)
                     )
+                log.debug("Distributed wrapping complete.")
 
             else:
                 if self.conf.env.type == "DP":  # DP (Data Parallel)
@@ -388,10 +420,30 @@ class TorchPredictor:
                         if self.conf.scheme.compile
                         else DP(model)
                     )
+                    log.debug("Data Parallel wrapping complete.")
                 else:  # Single
                     self.learner.model = (
                         torch.compile(model) if self.conf.scheme.compile else model
                     )
+
+            # Components
+            if "loss" in self.conf:
+                self.loss = instantiate(self.conf.loss)
+                log.debug("Loss function loaded.")
+            else:
+                self.loss = None
+
+            if "optimizer" in self.conf:
+                self.opt = instantiate(self.conf.optimizer, self.learner.model.parameters())
+                log.debug("Optimizer loaded.")
+            else:
+                self.opt = None
+
+            if "scheduler" in self.conf and self.conf.scheduler.cls:
+                sch = instantiate(self.conf.scheduler, self.opt, last_epoch = self.conf.scheme.init_iter - 1)
+                log.debug("Scheduler loaded.")
+            else:
+                self.sch = None
 
             # Resuming
             if not self.learner.resume():
@@ -402,7 +454,9 @@ class TorchPredictor:
                 if isinstance(self.conf.resume_path, str):
                     resume_path = Path(self.conf.resume_path)
                 if resume_path.is_file():
-                    self.learner.resume_optimizer(path=resume_path)
+                    self.load_state(path=resume_path)
+                    if self.sch:
+                        self.sch.last_epoch = self.conf.scheme.init_iter - 1
                 else:
                     raise FileNotFoundError(
                         f"No checkpoint(optimizer) exists: {resume_path.absolute()}"
@@ -412,9 +466,11 @@ class TorchPredictor:
                 if isinstance(self.conf.resume_dir, str):
                     resume_dir = Path(self.conf.resume_dir)
                 if resume_dir.is_dir():
-                    self.learner.resume_optimizer(
+                    self.load_state(
                         path=resume_dir.joinpath(f"state_{self.conf.resume_step}.cpt")
                     )
+                    if self.sch:
+                        self.sch.last_epoch = self.conf.scheme.init_iter - 1
                 log.info(
                     f"Training states resumed from {resume_dir} at timestep {self.conf.resume_step}."
                 )
@@ -429,11 +485,11 @@ class TorchPredictor:
                 _res = False
 
             if self.conf.env.type in ENV_DIST_TYPES:
-                self.learner.opt = self.get_dist_opt(
+                self.opt = self.get_dist_opt(
                     self.conf.env.dist.optimizer,
-                    self.learner.opt,
+                    self.opt,
                     self.learner.model.parameters(),
-                    self.learner.conf.optimizer.options.lr,
+                    self.conf.optimizer.options.lr,
                 )
 
             return _res

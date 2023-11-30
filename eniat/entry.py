@@ -12,28 +12,28 @@ def console():
 
     logger = load_logger(conf.logger)
     course = CourseBook(conf=conf.data)
-    logger.info(f"Task '{conf.task}' requested using package {conf.package}")
+    logger.debug(f"Task '{conf.task}' requested using package {conf.package}")
     try:
         if conf.package == "sklearn":
             logger.critical("scikit-learn is not yet supported.")
         elif conf.package == "torch":
-            from .torch import load_grader, load_learner, load_trainer
+            from .torch import load_learner, TorchTrainer, TorchGrader
 
             learner = load_learner(conf.learner)
 
             if conf.task == "fit" or conf.task == "train":
 
-                grader = load_grader(conf.grader, logger, course, learner)
-                trainer = load_trainer(conf.trainer, logger, grader, course, learner)
+                grader = TorchGrader(conf.grader, logger=logger, course=course, learner=learner,)
+                trainer = TorchTrainer(conf.trainer, logger, grader, course, learner)
                 trainer.fit()
 
             if conf.task == "eval" or conf.task == "test":
 
-                grader = load_grader(conf.grader, logger, course, learner)
+                grader = TorchGrader(conf.grader, logger=logger, course=course, learner=learner,)
                 grader.eval()
 
             if conf.task == "infer" or conf.task == "predict":
-                grader = load_grader(conf.grader, logger, course, learner)
+                grader = TorchGrader(conf.grader, logger=logger, course=course, learner=learner,)
                 grader.predict()
 
         else:

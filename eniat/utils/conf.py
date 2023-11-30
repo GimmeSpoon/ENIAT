@@ -33,13 +33,14 @@ for reskey in RESKEYS:
 
 
 def recursive_merge(*configs) -> DictConfig:
-    merged = OmegaConf.create({})
 
+    merged = configs[0]
     if len(configs) == 1:
-        for config in configs[0]:
-            merged = OmegaConf.unsafe_merge(merged, config)
+        return merged
     else:
-        for config in configs:
+        for config in configs[1:]:
+            if not config:
+                continue
             merged = OmegaConf.unsafe_merge(merged, config)
 
     return merged

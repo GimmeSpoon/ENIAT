@@ -1,9 +1,9 @@
-from typing import TypeVar, Literal
+from typing import TypeVar, Literal, Union
 from .grader import TorchGrader
 from .predictor import TorchPredictor, to_tensor, distributed
 from ..core import Trainer, CourseBook
 from .learner import TorchLearner
-from ..utils import StateLogger, bar, advance, reset, end
+from ..utils import StateLogger, bar, advance, reset, end, init_logger
 from rich.progress import (
     Progress,
     TextColumn,
@@ -23,23 +23,12 @@ from omegaconf import DictConfig
 from pathlib import Path
 import warnings
 from contextlib import nullcontext
+import itertools
 
 T = TypeVar("T", bound=TorchLearner)
 C = TypeVar("C", bound=CourseBook)
 L = TypeVar("L", bound=StateLogger)
 G = TypeVar("G", bound=TorchGrader)
-
-
-def load_trainer(cfg: DictConfig, log: L, grader: G = None, course=None, learner=None):
-
-    # instantiate trainer
-    trainer = TorchTrainer(cfg, log=log, grader=grader, course=course, learner=learner)
-
-    if trainer:
-        log.info("Trainer instance created.")
-
-    return trainer
-
 
 class TorchTrainer(TorchPredictor, Trainer):
     r"""PyTorch compatible trainer class.
@@ -47,15 +36,29 @@ class TorchTrainer(TorchPredictor, Trainer):
     It only occupies one device(GPU)"""
 
     def __init__(
-        self, conf: DictConfig = None, log=None, grader=None, course=None, learner=None
+        self,
+        conf: DictConfig = None,
+        log=None,
+        grader=None,
+        course=None,
+        learner=None,
+        loss_fn=None,
+        optimizer=None,
+        scheduler=None,
     ) -> None:
 
         super(TorchTrainer, self).__init__(conf.env)
-        self.conf = conf
-        self.log = log
+        self.conf = conf if not "trainer" in conf else conf.trainer
+        if log is not None:
+            self.log = log
+        elif "logger" in conf:
+            self.log = init_logger()
         self.grader = grader
         self.course = course
         self.learner = learner
+        self.loss = loss_fn
+        self.opt = optimizer
+        self.sch = scheduler
 
         warnings.showwarning = lambda *args: self.log.warning(args[0])
 
@@ -76,14 +79,14 @@ class TorchTrainer(TorchPredictor, Trainer):
     def _save_state(self, timestep: int, filename: str = None) -> None:
         train_state = {}
         train_state["scheduler"] = (
-            self.learner.sch.state_dict() if self.learner.sch is not None else None
+            self.sch.state_dict() if self.sch is not None else None
         )
-        train_state["optimizer"] = self.learner.opt.state_dict()
+        train_state["optimizer"] = self.opt.state_dict()
         train_state["unit"] = self.conf.scheme.unit
         train_state["rng_state"] = self.get_rand_state()
         train_state["timestep"] = timestep
         train_state["batch_size"] = self.conf.loader.batch_size
-        train_state["maxstep"] = self.conf.scheme.max_step
+        train_state["total_iters"] = self.conf.scheme.total_iters
         train_state["env"] = self.conf.env
         Path(os.path.join(self.conf.output_dir, "checkpoints")).mkdir(
             parents=True, exist_ok=True
@@ -113,13 +116,13 @@ class TorchTrainer(TorchPredictor, Trainer):
         if self.conf.scheme.unit == "step" and step is not None:
             if step % self.conf.scheme.save_interval == 0:
                 if dist.is_initialized():
-                    self.learner.opt.consolidate_state_dict(0)
+                    self.opt.consolidate_state_dict(0)
                 if not dist.is_initialized() or dist.get_rank() == 0:
                     self._save_checkpoint(step, "step")
         elif self.conf.scheme.unit == "epoch" and epoch is not None:
             if epoch % self.conf.scheme.save_interval == 0:
                 if dist.is_initialized():
-                    self.learner.opt.consolidate_state_dict(0)
+                    self.opt.consolidate_state_dict(0)
                 if not dist.is_initialized() or dist.get_rank() == 0:
                     self._save_checkpoint(epoch, "epoch")
 
@@ -145,37 +148,32 @@ class TorchTrainer(TorchPredictor, Trainer):
         e_loss = torch.zeros(2, device=device, requires_grad=False)
 
         if resumed:
-            self.set_rand_state(resumed["rng_state"])
-            self.conf.scheme.init_step = resumed["timestep"]
-            self.conf.scheme.unit = resumed["unit"]
 
             if self.conf.scheme.unit == "step":
-                total_step = self.conf.scheme.init_step
+                total_step = self.conf.scheme.init_iter
 
-            self.log.info("Training state resumed.")
+            self.log.info(f"Training state ({self.conf.scheme.init_iter} \
+                          {self.conf.scheme.unit}) resumed.")
 
         with bar(
             "train",
-            total_epochs=self.conf.scheme.max_step
+            total_epochs=self.conf.scheme.total_iters
             if self.conf.scheme.unit == "epoch"
             else None,
-            total_steps=self.conf.scheme.max_step
+            total_steps=self.conf.scheme.total_iters
             if self.conf.scheme.unit == "step"
             else len(self.loader),
-            start_epoch=self.conf.scheme.init_step
+            start_epoch=self.conf.scheme.init_iter
             if self.conf.scheme.unit == "epoch"
             else None,
-            start_step=self.conf.scheme.init_step
+            start_step=self.conf.scheme.init_iter
             if self.conf.scheme.unit == "step"
             else None,
         ) if (not dist.is_initialized() or dist.get_rank() == 0) else nullcontext():
 
             for epoch in range(
-                self.conf.scheme.init_step + 1,
-                self.conf.scheme.max_step + 1
-                if self.conf.scheme.unit == "epoch"
-                else 2,
-            ):
+                self.conf.scheme.init_iter + 1,
+                self.conf.scheme.total_iters + 1) if self.conf.scheme.unit == "epoch" else itertools.count(1):
 
                 if self.conf.scheme.unit == "epoch":
                     if not dist.is_initialized() or dist.get_rank() == 0:
@@ -190,16 +188,18 @@ class TorchTrainer(TorchPredictor, Trainer):
                         batch, dtype=self.conf.scheme.dtype, device=device
                     )
                     self.learner.model.train(True)
-                    self.learner.opt.zero_grad()
+                    self.opt.zero_grad()
 
                     if self.conf.scheme.precision is None:
-                        cur_loss = self.learner.fit(batch, device, self.log)
+                        pred = self.learner.fit(batch[0], device, self.log)
+                        cur_loss = self.loss(pred, batch[1].to(device))
                     else:
                         with torch.autocast(
                             torch.device(device),
                             dtype=getattr(torch, self.conf.scheme.precision),
                         ):
-                            cur_loss = self.learner.fit(batch, device, self.log)
+                            pred = self.learner.fit(batch[0], device, self.log)
+                            cur_loss = self.loss(pred, batch[1].to(device))
 
                     _back = False
 
@@ -217,23 +217,26 @@ class TorchTrainer(TorchPredictor, Trainer):
                         _back = True
 
                     if _back:
+
+                        s_loss[1] = batch[0].size(dim=0)
+                        s_loss[0] = loss.item() * s_loss[1]
+
+                        e_loss[0] += s_loss[0]
+                        e_loss[1] += s_loss[1]
+
                         if self.conf.scheme.gradient_scale:
                             scaler = GradScaler(loss)
                             scaler.scale(loss).backward()
-                            scaler.step(self.learner.opt)
+                            scaler.step(self.opt)
                             scaler.update()
                         else:
                             scaler = None
                             loss.backward()
-                            self.learner.opt.step()
+                            self.opt.step()
+
+                        loss = None
 
                     self.learner.model.train(False)
-
-                    s_loss[1] = batch[0].size(dim=0)
-                    s_loss[0] = loss.item() * s_loss[1]
-
-                    e_loss[0] += s_loss[0]
-                    e_loss[1] += s_loss[1]
 
                     if dist.is_initialized():
                         dist.reduce(s_loss, 0, dist.ReduceOp.SUM)
@@ -242,9 +245,9 @@ class TorchTrainer(TorchPredictor, Trainer):
                         self.log.log_state(
                             {
                                 "Training Loss": (s_loss[0] / s_loss[1]).item(),
-                                "Learning Rate": self.learner.sch.get_lr()
-                                if self.learner.sch
-                                else None,
+                                "Learning Rate": self.sch.get_lr()
+                                if self.sch
+                                else 0,
                             },
                             epoch,
                             current_step + 1,
@@ -257,7 +260,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                     # Evaluation (step)
                     if self.grader is not None:
                         _rng_state = self.get_rand_state()
-                        self.grader.eval(
+                        if self.grader.eval(
                             device,
                             global_rank,
                             silent,
@@ -266,15 +269,27 @@ class TorchTrainer(TorchPredictor, Trainer):
                             timestep=total_step,
                             unit="step",
                             env_conf=self.conf.env,
-                        )
-                        self.set_rand_state(_rng_state)
+                        ):
+                            self.set_rand_state(_rng_state)
 
                     # Checkpoint (step)
                     self.__chk(step=total_step)
 
+                    if self.conf.scheme.unit == "step":
+                        if self.sch:
+                            self.sch.step()
+                        if self.conf.total_iters <= total_step:
+                            break
+
+                # STEP OVER ==========================================================
+
+                if self.conf.scheme.unit == "step" and \
+                    self.conf.scheme.total_iters <= total_step:
+                    break
+
                 # Scheduler
-                if self.learner.sch:
-                    self.learner.sch.step()
+                if self.sch and self.conf.scheme.unit == "epoch":
+                    self.sch.step()
 
                 if dist.is_initialized():
                     dist.reduce(e_loss, 0, dist.ReduceOp.SUM)
@@ -283,9 +298,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                     self.log.log_state(
                         {
                             "Training Loss": (e_loss[0] / e_loss[1]).item(),
-                            "Learning Rate": self.learner.sch.get_lr()
-                            if self.learner.sch
-                            else None,
+                            "Learning Rate": self.sch.get_lr() if self.sch else 0,
                         },
                         epoch,
                         current_step + 1,
@@ -302,7 +315,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                 # Evaluation (epoch)
                 if self.grader is not None:
                     _rng_state = self.get_rand_state()
-                    self.grader.eval(
+                    if self.grader.eval(
                         device,
                         global_rank,
                         silent,
@@ -311,18 +324,18 @@ class TorchTrainer(TorchPredictor, Trainer):
                         timestep=epoch,
                         unit="epoch",
                         env_conf=self.conf.env,
-                    )
-                    self.set_rand_state(_rng_state)
+                    ):
+                        self.set_rand_state(_rng_state)
 
         # loop over
         if not dist.is_initialized() or dist.get_rank() == 0:
             end("train")
 
         if dist.is_initialized():
-            self.learner.opt.consolidate_state_dict()
+            self.opt.consolidate_state_dict()
 
         if not dist.is_initialized() or dist.get_rank() == 0:
-            self._save_checkpoint(self.conf.scheme.max_step, self.conf.scheme.unit)
+            self._save_checkpoint(self.conf.scheme.total_iters, self.conf.scheme.unit, True)
 
         if dist.is_initialized():
             dist.destroy_process_group()

@@ -5,6 +5,8 @@ from .statelogger import (
     MLFlowLogger,
     TotalLogger,
     load_logger,
+    init_logger,
+    get_logger,
 )
 from .cli import parser, init
 from .conf import (

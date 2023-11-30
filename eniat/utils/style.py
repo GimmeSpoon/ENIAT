@@ -138,14 +138,14 @@ class LogView:
 
     def __render(self, width: int, height: int):
         rendered = []
-        wlmt, hlmt = max(width - 4, 1), max(height - 8, 1)
+        wlmt, hlmt = max(width - 4, 1), max(height - 5, 1)
         for line in self.lines:
             num_line = ceil(len(line) / wlmt)
             if num_line <= 1:
                 rendered.append(line)
             else:
                 rendered += [line[wlmt * l : wlmt * (l + 1)] for l in range(num_line)]
-        return rendered[-height:]
+        return rendered[-hlmt:]
 
     def __rich_console__(
         self, console: Console, options: ConsoleOptions
@@ -155,7 +155,6 @@ class LogView:
     def flush(self, msg: str):
         self.lines += msg.strip().split("\n")
         live.refresh()
-
 
 def progress_bar(spinner: str, **kwargs):
     return Progress(
@@ -213,9 +212,7 @@ def init_display(console: Console = None, silent: bool = False):
 
     return console
 
-
-# PROGRESS
-
+#PROGRESS
 
 def bar(
     task: Literal["train", "eval"],
@@ -272,3 +269,7 @@ def end(task: Literal["train", "eval"], restore: bool = False):
         else:
             progress1.stop()
             status.update("Completed!", spinner="smiley")
+
+def initiated() -> bool:
+    global g_console
+    return g_console is None
