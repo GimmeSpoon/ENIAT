@@ -314,8 +314,7 @@ class TensorboardLogger(StateLogger):
     def prepare(self) -> None:
         tb = __import__("torch.utils.tensorboard", fromlist=["SummaryWriter"])
         self.tb = tb.SummaryWriter(
-            self.conf.logging_dir
-            or Path.joinpath(Path(self.hc.runtime.output_dir), "tensorboard")
+            Path(self.conf.logging_dir).joinpath("tensorboard")
         )
 
     def reload(self, *args, **kwargs) -> None:
@@ -334,7 +333,6 @@ class TensorboardLogger(StateLogger):
         to_csv: bool = False,
         silent: bool = False,
     ):
-
         if not self.check_loss_policy(epoch if unit == "epoch" else step, unit) or self.inactive:
             return
         if len(data) == 1:

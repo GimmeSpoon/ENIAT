@@ -440,7 +440,7 @@ class TorchPredictor:
                 self.opt = None
 
             if "scheduler" in self.conf and self.conf.scheduler.cls:
-                sch = instantiate(self.conf.scheduler, self.opt, last_epoch = self.conf.scheme.init_iter - 1)
+                self.sch = instantiate(self.conf.scheduler, self.opt, last_epoch = self.conf.scheme.init_iter - 1)
                 log.debug("Scheduler loaded.")
             else:
                 self.sch = None

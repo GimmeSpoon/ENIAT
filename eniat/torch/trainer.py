@@ -24,6 +24,7 @@ from pathlib import Path
 import warnings
 from contextlib import nullcontext
 import itertools
+import numpy as np
 
 T = TypeVar("T", bound=TorchLearner)
 C = TypeVar("C", bound=CourseBook)
@@ -245,12 +246,12 @@ class TorchTrainer(TorchPredictor, Trainer):
                         self.log.log_state(
                             {
                                 "Training Loss": (s_loss[0] / s_loss[1]).item(),
-                                "Learning Rate": self.sch.get_lr()
+                                "Learning Rate": np.array(self.sch.get_last_lr())
                                 if self.sch
                                 else 0,
                             },
                             epoch,
-                            current_step + 1,
+                            total_step,
                             "step",
                         )
 
@@ -278,7 +279,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                     if self.conf.scheme.unit == "step":
                         if self.sch:
                             self.sch.step()
-                        if self.conf.total_iters <= total_step:
+                        if self.conf.scheme.total_iters <= total_step:
                             break
 
                 # STEP OVER ==========================================================
@@ -293,15 +294,15 @@ class TorchTrainer(TorchPredictor, Trainer):
 
                 if dist.is_initialized():
                     dist.reduce(e_loss, 0, dist.ReduceOp.SUM)
-
+                
                 if not dist.is_initialized() or dist.get_rank() == 0:
                     self.log.log_state(
                         {
                             "Training Loss": (e_loss[0] / e_loss[1]).item(),
-                            "Learning Rate": self.sch.get_lr() if self.sch else 0,
+                            "Learning Rate": np.array(self.sch.get_last_lr()) if self.sch else 0,
                         },
                         epoch,
-                        current_step + 1,
+                        total_step,
                         "epoch",
                     )
 

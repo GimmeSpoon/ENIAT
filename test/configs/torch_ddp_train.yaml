@@ -4,9 +4,9 @@ package: torch
 logger:
   name: eniat
   logging_dir: ./
-  type: StateLogger
+  type: TensorboardLogger
   level: 10
-  unit: epoch
+  unit: step
   json: True
 
 data:
@@ -54,15 +54,16 @@ trainer:
     path:
     options:
       base_lr: 0.001
+      total_iters: ${trainer.scheme.total_iters}
+      warmup_steps: ${trainer.scheme.warmup_steps}
 
   scheme:
-    max_step: 100
+    total_iters: 100
     seed: 12345
     unit: step
     warmup_steps: 20
-    warmup_unit: step
-    save_interval: 2
-    update_interval: 2
+    save_interval: 20
+    update_interval: 1
   loader:
     batch_size: 1000
   env:
@@ -80,7 +81,7 @@ grader:
     metrics:
       - {cls: torcheval.metrics.functional.mean_squared_error}
     unit: epoch
-    eval_interval: 2
+    eval_interval: 20
   loader:
     batch_size: 100
     shuffle: False

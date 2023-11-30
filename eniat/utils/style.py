@@ -222,10 +222,14 @@ def bar(
     start_step=0,
     msg=None,
 ):
+    global ebar_restore
+
+    ebar_restore = total_epochs is not None
 
     if task == "train":
         status.update("Training...") if msg is None else status.update(msg)
-        progress1.update(ebar, total=total_epochs, completed=start_epoch, visible=True)
+        if total_epochs is not None:
+            progress1.update(ebar, total=total_epochs, completed=start_epoch, visible=True)
         progress1.update(sbar, total=total_steps, completed=start_step, visible=True)
     else:
         status.update("Evaluating...") if msg is None else status.update(msg)
@@ -264,7 +268,8 @@ def end(task: Literal["train", "eval"], restore: bool = False):
         if restore:
             progress2.update(vbar, visible=False)
             status.update("Training...")
-            progress1.update(ebar, visible=True)
+            if ebar_restore:
+                progress1.update(ebar, visible=True)
             progress1.update(sbar, visible=True)
         else:
             progress1.stop()
