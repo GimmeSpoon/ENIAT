@@ -126,7 +126,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                     self.opt.consolidate_state_dict(0)
                 if not dist.is_initialized() or dist.get_rank() == 0:
                     self._save_checkpoint(epoch, "epoch")
-
+                    
     @distributed
     def fit(
         self,
@@ -217,7 +217,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                         loss = cur_loss
                         _back = True
 
-                    if _back:
+                    if _back or current_step == len(self.loader) - 1:
 
                         s_loss[1] = batch[0].size(dim=0)
                         s_loss[0] = loss.item() * s_loss[1]
