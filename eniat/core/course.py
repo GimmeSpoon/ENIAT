@@ -24,8 +24,8 @@ def get_course_instance(cfg: DictConfig, log=None, as_list: bool = False):
                 Course(
                     label,
                     instantiate(cfg[label]),
-                    transform=instantiate(cfg[label]["transform"], _partial=True),
-                    cache=cfg[label]["cache"],
+                    transform=instantiate(cfg[label]["transform"], _partial=True) if "transform" in cfg[label] else None,
+                    cache=cfg[label]["cache"] if "cache" in cfg[label] else False,
                 )
             )
             if log:
@@ -35,8 +35,8 @@ def get_course_instance(cfg: DictConfig, log=None, as_list: bool = False):
                 Course(
                     label,
                     data=batch_load(cfg[label]["path"], cfg[label].type),
-                    transform=instantiate(cfg[label]["transform"], _partial=True),
-                    cache=cfg[label["cache"]],
+                    transform=instantiate(cfg[label]["transform"], _partial=True) if "transform" in cfg[label] else None,
+                    cache=cfg[label["cache"]] if "cache" in cfg[label] else False,
                 )
             )
             if log:

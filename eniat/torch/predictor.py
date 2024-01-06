@@ -344,7 +344,6 @@ class TorchPredictor:
         if load_data:
             self.course.load()
             self.loader = self.get_loader(self.conf.data_label)
-            self.conf.scheme.batch_per_update = len(self.loader)
         log.debug("Data ready.")
 
         # learner
@@ -478,10 +477,10 @@ class TorchPredictor:
                 log.warning("Training states not resumed.")
                 if self.conf.scheme.seed:
                     self.rand_all(int(self.conf.scheme.seed))
-                elif not self.conf.scheme.seed:
+                else:
                     self.log.warning("Random seed is not set.")
                     self.seed = random.random()
-                    self.rand_all(int(self.seed))
+                    self.rand_all(self.seed)
                 _res = False
 
             if self.conf.env.type in ENV_DIST_TYPES:

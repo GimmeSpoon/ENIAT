@@ -160,7 +160,17 @@ class DummyLogger(Logger):
     def exception(self, msg, *args, **kwargs):
         return self.console.exception(msg, *args, **kwargs) if not self.silent else None
 
-    def log_state(self, data: dict) -> None:
+    def log_state(
+        self,
+        data: dict,
+        epoch: int = None,
+        step: int = None,
+        unit: Literal["epoch", "step"] = "epoch",
+        training_state: bool = True,
+        to_json: bool = None,
+        to_xls: bool = None,
+        to_csv: bool = None,
+        silent: bool = False,) -> None:
         return None
 
 
