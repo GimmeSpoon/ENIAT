@@ -291,7 +291,7 @@ class TorchPredictor:
         random.setstate(state["random"])
         self.log.debug("Random state set.")
 
-    def load_state(self, path: str, force:bool=False) -> None:
+    def load_state(self, path: str, force: bool = False) -> None:
         resumed = torch.load(path)
         if resumed["scheduler"]:
             self.resume_scheduler(resumed["scheduler"])
@@ -308,7 +308,7 @@ class TorchPredictor:
         self.conf.env = resumed["env"]
         self.log.debug("Random state loaded.")
 
-    def resume_optimizer(self, state_dict=None, path:Union[str, Path]=None) -> None:
+    def resume_optimizer(self, state_dict=None, path: Union[str, Path] = None) -> None:
         if state_dict:
             self.opt.load_state_dict(state_dict)
         else:
@@ -433,13 +433,19 @@ class TorchPredictor:
                 self.loss = None
 
             if "optimizer" in self.conf:
-                self.opt = instantiate(self.conf.optimizer, self.learner.model.parameters())
+                self.opt = instantiate(
+                    self.conf.optimizer, self.learner.model.parameters()
+                )
                 log.debug("Optimizer loaded.")
             else:
                 self.opt = None
 
             if "scheduler" in self.conf and self.conf.scheduler.cls:
-                self.sch = instantiate(self.conf.scheduler, self.opt, last_epoch = self.conf.scheme.init_iter - 1)
+                self.sch = instantiate(
+                    self.conf.scheduler,
+                    self.opt,
+                    last_epoch=self.conf.scheme.init_iter - 1,
+                )
                 log.debug("Scheduler loaded.")
             else:
                 self.sch = None
@@ -479,7 +485,7 @@ class TorchPredictor:
                     self.rand_all(int(self.conf.scheme.seed))
                 else:
                     self.log.warning("Random seed is not set.")
-                    self.seed = random.random()
+                    self.seed = random.randint(0, 1000)
                     self.rand_all(self.seed)
                 _res = False
 

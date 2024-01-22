@@ -204,12 +204,18 @@ class TorchTrainer(TorchPredictor, Trainer):
                             pred = self.learner.fit(batch[0], device, self.log)
                             cur_loss = self.loss(pred, batch[1].to(device))
 
+                    if self.conf.scheme.gradient_scale:
+                        scaler = GradScaler(loss)
+                        scaler.scale(loss).backward()
+                    else:
+                        cur_loss.backward()
+
                     _back = False
 
                     # Backward
                     if self.conf.scheme.update_interval:
                         if loss is None:
-                            loss = cur_loss
+                            loss = cur_loss.copy()
                         else:
                             loss = loss + cur_loss
 
@@ -227,14 +233,13 @@ class TorchTrainer(TorchPredictor, Trainer):
                         e_loss[0] = e_loss[0] + s_loss[0]
                         e_loss[1] = e_loss[1] + s_loss[1]
 
+                        self.opt.zero_grad()
+
                         if self.conf.scheme.gradient_scale:
-                            scaler = GradScaler(loss)
-                            scaler.scale(loss).backward()
                             scaler.step(self.opt)
                             scaler.update()
                         else:
                             scaler = None
-                            loss.backward()
                             self.opt.step()
 
                         loss = None
