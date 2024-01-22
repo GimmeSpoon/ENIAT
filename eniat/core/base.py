@@ -1,13 +1,17 @@
 """Base classes for basic components.
-Each package-based components such as Trainer or Grader inherit classes from this module."""
+Each package-based components such as Trainer or Grader
+inherit classes from this module."""
 
-from abc import ABCMeta, abstractmethod
-from typing import TypeVar, Callable, Sequence, Union, Any, Hashable
-from .course import CourseBook
-from ..utils import load_class
 import copy
+import functools
 import warnings
+from abc import ABCMeta, abstractmethod
+from typing import Any, Callable, Hashable, Sequence, TypeVar, Union
+
 from omegaconf import DictConfig
+
+from ..utils import load_class
+from .course import CourseBook
 
 T_co = TypeVar("T_co", covariant=True)
 B = TypeVar("B", bound=CourseBook)
@@ -30,9 +34,12 @@ class Warning:
 
 class Learner(metaclass=ABCMeta):
     r"""Base class for all learners
-    It is basically wrapper class for model such as module in pytorch or estimator in scikit-learn.
-    This class is meant for just simple training and inference features, not for some other things like datastream manipulation.
-    It is because the model could be used for inference only task in the future updates."""
+    It is basically wrapper class for model
+    such as module in pytorch or estimator in scikit-learn.
+    This class is meant for just simple training and inference features,
+    not for some other things like datastream manipulation.
+    It is because the model could be used for
+    inference only task in the future updates."""
 
     @abstractmethod
     def predict(self, batch):
@@ -102,10 +109,13 @@ class Grader:
                     if isinstance(method, str):
                         self.methods.append(load_class(_class=method))
                     elif isinstance(method, DictConfig):
+                        _cls = load_class(
+                            method.path if "path" in method else None, method.cls
+                        )
                         self.methods.append(
-                            load_class(
-                                method.path if "path" in method else None, method.cls
-                            )
+                            functools.partial(_cls, **method.options)
+                            if "options" in method
+                            else _cls
                         )
                     else:
                         raise ValueError("Invalid metric")
@@ -146,16 +156,27 @@ class RemoteGrader:
 class Trainer:
     r"""Base class for Trainer
 
-    Trainer provides logging and saving checkpoints, furthermore lessen the repetitive parts in usual machine learning codes.
-    BaseTrainer provides fit, eval, and predict features even it not specifying compatibility with libraries such as PyTorch or Scikit-learn.
-    It can work with some of simple models, thus you can use this standalone. But for supported libraries, it would be recommended to use based class for the task.
-    Remember, Trainers are designed to do only one task at a time, which means for multiple tasks you are required to initiate the same number of trainers.
-    This is beacause for distributed learning in PyTorch, it would complicate the whole project if the trainer manages multiple tasks by alone.
+    Trainer provides logging and saving checkpoints, furthermore
+    lessen the repetitive parts in usual machine learning codes.
+    BaseTrainer provides fit, eval, and predict features even it
+    not specifying compatibility with libraries such as PyTorch
+    or Scikit-learn. It can work with some of simple models,
+    thus you can use this standalone. But for supported libraries,
+    it would be recommended to use based class for the task.
+    Remember, Trainers are designed to do only one task at a time,
+    which means for multiple tasks you are required to initiate
+    the same number of trainers. This is beacause for distributed
+    learning in PyTorch, it would complicate the whole project if
+    the trainer manages multiple tasks by alone.
 
     Arguments:
-        :param course: dataset for the task. It should not be modified while on doing tasks.
-        :param learner: learner(model) for the task. recommend to use same based class e.g. TorchLearner for TorchTrainer.
-        :param conf: Trainer configuration structured by omegaconf DictConfig.
+        :param course: dataset for the task. It should not be
+                        modified while on doing tasks.
+        :param learner: learner(model) for the task. recommend
+                        to use same based class
+                        e.g. TorchLearner for TorchTrainer.
+        :param conf: Trainer configuration structured by omegaconf
+                        DictConfig.
         :param grader: Evalutor from eniat package.
         :param logger: Logger from eniat package. required.
     """

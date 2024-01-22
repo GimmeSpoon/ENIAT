@@ -195,37 +195,27 @@ class TorchTrainer(TorchPredictor, Trainer):
 
                     if self.conf.scheme.precision is None:
                         pred = self.learner.fit(batch[0], device, self.log)
-                        cur_loss = self.loss(pred, batch[1].to(device))
+                        loss = self.loss(pred, batch[1].to(device))
                     else:
                         with torch.autocast(
                             torch.device(device),
                             dtype=getattr(torch, self.conf.scheme.precision),
                         ):
                             pred = self.learner.fit(batch[0], device, self.log)
-                            cur_loss = self.loss(pred, batch[1].to(device))
+                            loss = self.loss(pred, batch[1].to(device))
+
+                    if self.conf.scheme.update_interval:
+                        loss = loss / self.conf.scheme.update_interval
 
                     if self.conf.scheme.gradient_scale:
                         scaler = GradScaler(loss)
                         scaler.scale(loss).backward()
                     else:
-                        cur_loss.backward()
+                        loss.backward()
 
-                    _back = False
-
-                    # Backward
-                    if self.conf.scheme.update_interval:
-                        if loss is None:
-                            loss = cur_loss.clone()
-                        else:
-                            loss = loss + cur_loss
-
-                        if (current_step + 1) % self.conf.scheme.update_interval:
-                            _back = True
-                    else:
-                        loss = cur_loss
-                        _back = True
-
-                    if _back or current_step == len(self.loader) - 1:
+                    if (
+                        ((current_step + 1) % self.conf.scheme.update_interval) == 0
+                    ) or (current_step == len(self.loader) - 1):
 
                         s_loss[1] = batch[0].size(dim=0)
                         s_loss[0] = loss.item() * s_loss[1]
@@ -241,8 +231,6 @@ class TorchTrainer(TorchPredictor, Trainer):
                         else:
                             scaler = None
                             self.opt.step()
-
-                        loss = None
 
                     self.learner.model.train(False)
 
