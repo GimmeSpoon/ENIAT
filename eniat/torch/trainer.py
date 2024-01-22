@@ -215,7 +215,7 @@ class TorchTrainer(TorchPredictor, Trainer):
                     # Backward
                     if self.conf.scheme.update_interval:
                         if loss is None:
-                            loss = cur_loss.copy()
+                            loss = cur_loss.clone()
                         else:
                             loss = loss + cur_loss
 
