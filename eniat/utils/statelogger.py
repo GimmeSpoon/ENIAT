@@ -3,25 +3,26 @@ experiments you conduct. The basic feature is to log outputs to stdout
 just like builtin package 'logging', but also it can log to files or
 other tools such as Tensorboard or MLFlow."""
 
-import logging
-from logging import Formatter, LogRecord, StreamHandler
-from datetime import datetime
-from typing import Callable, Literal, TypeVar, Union, Any
-from pathlib import Path
-from omegaconf import DictConfig, OmegaConf
-import json
 import csv
-import openpyxl
-from openpyxl import Workbook
-from abc import abstractmethod
+import json
+import logging
 import os
 import sys
-from rich.traceback import install
-from rich.console import Console
-from .style import init_display, LogHandler, PreLogHandler, LogFileHandler
+from abc import abstractmethod
 from datetime import datetime
+from logging import Formatter, LogRecord, StreamHandler
+from pathlib import Path
+from typing import Any, Callable, Literal, TypeVar, Union
 
-install(show_locals=True)
+import openpyxl
+from omegaconf import DictConfig, OmegaConf
+from openpyxl import Workbook
+from rich.console import Console
+from rich.traceback import install
+
+from .style import LogFileHandler, LogHandler, PreLogHandler, init_display
+
+install(show_locals=False)
 
 FILE_HND_MAX_BYTES = 10_485_760
 FILE_HND_BCK_COUONT = 1
@@ -29,6 +30,7 @@ FILE_HND_BCK_COUONT = 1
 T_co = TypeVar("T_co", covariant=True)
 
 g_logger = None
+
 
 class Logger:
     @abstractmethod
@@ -170,7 +172,8 @@ class DummyLogger(Logger):
         to_json: bool = None,
         to_xls: bool = None,
         to_csv: bool = None,
-        silent: bool = False,) -> None:
+        silent: bool = False,
+    ) -> None:
         return None
 
 
@@ -196,7 +199,7 @@ class StateLogger(DummyLogger):
                     else:
                         self.__s[step] = [data]
             else:
-                if not epoch in self.__e:
+                if epoch not in self.__e:
                     self.__e[epoch] = {"data": []}
 
                 if step is None:
@@ -260,7 +263,7 @@ class StateLogger(DummyLogger):
         return self.console.findCaller(stack_info, stacklevel)
 
     def check_loss_policy(self, _t: int, _u: str) -> bool:
-        if _t == None or _u == None or self.conf.log_interval == 0:
+        if _t is None or _u is None or self.conf.log_interval == 0:
             return True
         return (_u == self.conf.unit) and (_t % self.conf.log_interval) == 0
 
@@ -312,9 +315,9 @@ class StateLogger(DummyLogger):
 
 
 class TensorboardLogger(StateLogger):
-    """TensorboardLogger literally features Tensorboard from torch.utils.
-    This inherits StateLogger, thus you can record Tensorboard and files at
-    the same time if you wish."""
+    """TensorboardLogger literally features Tensorboard from
+    torch.utils. This inherits StateLogger, thus you can record
+    Tensorboard and files at the same time if you wish."""
 
     def __init__(
         self, name: str, conf: DictConfig = None, resume_path: str = None
@@ -323,9 +326,7 @@ class TensorboardLogger(StateLogger):
 
     def prepare(self) -> None:
         tb = __import__("torch.utils.tensorboard", fromlist=["SummaryWriter"])
-        self.tb = tb.SummaryWriter(
-            Path(self.conf.logging_dir).joinpath("tensorboard")
-        )
+        self.tb = tb.SummaryWriter(Path(self.conf.logging_dir).joinpath("tensorboard"))
 
     def reload(self, *args, **kwargs) -> None:
         super().reload(*args, **kwargs)
@@ -343,16 +344,33 @@ class TensorboardLogger(StateLogger):
         to_csv: bool = False,
         silent: bool = False,
     ):
-        if not self.check_loss_policy(epoch if unit == "epoch" else step, unit) or self.inactive:
+        if (
+            not self.check_loss_policy(epoch if unit == "epoch" else step, unit)
+            or self.inactive
+        ):
             return
         if len(data) == 1:
             data = list(data.items())[0]
-            self.log_scalar(data[0], data[1], epoch if unit == "epoch" else step, silent=silent)
+            self.log_scalar(
+                data[0], data[1], epoch if unit == "epoch" else step, silent=silent
+            )
         elif len(data) > 1:
             tag = "Trainig state" if training_state else "Evaluation Result"
-            self.log_scalars(data, epoch if unit == "epoch" else step, tag, silent=silent)
+            self.log_scalars(
+                data, epoch if unit == "epoch" else step, tag, silent=silent
+            )
 
-        super().log_state(data, epoch, step, unit, training_state, to_json, to_xls, to_csv, silent=True)
+        super().log_state(
+            data,
+            epoch,
+            step,
+            unit,
+            training_state,
+            to_json,
+            to_xls,
+            to_csv,
+            silent=True,
+        )
 
     def log_scalar(self, key: str, value, step: int, silent: bool = False):
         if self.inactive:
@@ -386,7 +404,7 @@ class TensorboardLogger(StateLogger):
             return
         self.tb.add_image(tag, image, step, format)
         if not silent:
-            self.console.info(f"Logged an image to tensorboard")
+            self.console.info("Logged an image to tensorboard")
 
     def log_figure(
         self,
@@ -401,12 +419,12 @@ class TensorboardLogger(StateLogger):
             return
         self.tb.add_figure(tag, figure, step, close)
         if not silent:
-            self.console.info(f"Logged a figure to tensorboard")
+            self.console.info("Logged a figure to tensorboard")
 
 
 class MLFlowLogger(StateLogger):
-    """TensorboardLogger literally features Tensorboard from torch.utils.
-    This inherits StateLogger, thus you can record Tensorboard and files at
+    """MLFlowLogger literally features MLFlow for tracking experiments.
+    This inherits StateLogger, thus you can record MLFlow and files at
     the same time if you wish."""
 
     def __init__(
@@ -449,7 +467,7 @@ class MLFlowLogger(StateLogger):
 
     def __del__(self) -> None:
 
-        if not "mf" in self.__dict__:
+        if "mf" not in self.__dict__:
             return
 
         if self.mf is not None and self.mf.active_run() is not None:
@@ -521,11 +539,20 @@ class MLFlowLogger(StateLogger):
             return
         if len(data) == 1:
             data = list(data.items())[0]
-            self.log_scalar(data[0], data[1], epoch if unit == "epoch" else step, silent=silent)
+            self.log_scalar(
+                data[0], data[1], epoch if unit == "epoch" else step, silent=silent
+            )
         elif len(data) > 1:
-            self.log_scalars(data, epoch if unit == "epoch" else step, "Training State" if training_state else "Evaluation Result", silent=silent)
+            self.log_scalars(
+                data,
+                epoch if unit == "epoch" else step,
+                "Training State" if training_state else "Evaluation Result",
+                silent=silent,
+            )
 
-        super().log_state(data, epoch, step, unit, training_state, to_json, to_xls, to_csv, True)
+        super().log_state(
+            data, epoch, step, unit, training_state, to_json, to_xls, to_csv, True
+        )
 
 
 class TotalLogger(StateLogger):
@@ -626,7 +653,7 @@ class TotalLogger(StateLogger):
             self.console.info(f"Logged an image to {self.mf_logger.get_tracking_uri()}")
         if self.tensorboard:
             self.tb_logger.add_image(tag, image, step, format)
-            self.console.info(f"Logged an image to tensorboard")
+            self.console.info("Logged an image to tensorboard")
 
     def log_figure(
         self,
@@ -643,7 +670,7 @@ class TotalLogger(StateLogger):
             self.console.info(f"Logged a figure to {self.mf_logger.get_tracking_uri()}")
         if self.tensorboard:
             self.tb_logger.add_figure(tag, figure, step, close)
-            self.console.info(f"Logged a figure to tensorboard")
+            self.console.info("Logged a figure to tensorboard")
 
 
 def load_logger(logger_conf: DictConfig) -> Logger:
@@ -652,11 +679,8 @@ def load_logger(logger_conf: DictConfig) -> Logger:
     )
     return logger
 
-def init_logger(
-        log_cls = StateLogger,
-        conf:DictConfig = None,
-        **kwargs
-    ) -> Logger:
+
+def init_logger(log_cls=StateLogger, conf: DictConfig = None, **kwargs) -> Logger:
     global g_logger
     if g_logger is not None:
         if isinstance(g_logger, log_cls):
@@ -668,6 +692,7 @@ def init_logger(
     else:
         g_logger = log_cls(**kwargs)
     return g_logger
-    
+
+
 def get_logger() -> Logger:
     return g_logger or init_logger()

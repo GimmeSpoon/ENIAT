@@ -2,17 +2,17 @@
 Config utilities
 """
 
-from omegaconf import DictConfig, OmegaConf
-from importlib.resources import files
-from importlib.util import spec_from_file_location, module_from_spec
-from importlib import import_module
-import sys
 import os
-from pathlib import Path
-from typing import Union, Sequence
-from omegaconf import OmegaConf
+import sys
 from copy import deepcopy
 from functools import partial
+from importlib import import_module
+from importlib.resources import files
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+from typing import Sequence, Union
+
+from omegaconf import DictConfig, OmegaConf
 
 RESKEYS = (
     RESKEY_EVAL := "eval",
@@ -62,7 +62,7 @@ def load_conf(path: Union[str, Path, Sequence[Union[str, Path]]] = None) -> Dict
     if path is not None:
         if isinstance(path, str) or isinstance(path, Path):
             path = [path]
-        return recursive_merge_by_path(conf, path)
+        return OmegaConf.unsafe_merge(conf, recursive_merge_by_path(path))
     else:
         return conf
 
@@ -102,10 +102,10 @@ def load_class(path: Union[str, Path] = None, _class: str = None):
 
 def instantiate(conf: DictConfig, *args, _partial: bool = False, **kwargs):
     """
-    instantiate a provided DictConfig. The config must have 'cls' property
-    and optionally 'path'. 'cls' is a name for the class or the whole path
-    of the class (eg. torch.nn.Linear). 'path' is necessary if the class
-    is defined in a .py file and
+    instantiate a provided DictConfig. The config must have 'cls'
+    property and optionally 'path'. 'cls' is a name for the class
+    or the whole path of the class (eg. torch.nn.Linear). 'path'
+    is necessary if the class is defined in a .py file.
     """
     conf = deepcopy(conf)
     if not conf:

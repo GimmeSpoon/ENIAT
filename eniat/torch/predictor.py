@@ -338,6 +338,8 @@ class TorchPredictor:
                 log.be_inactive()
             else:
                 log.load_rich_console()
+        else:
+            log.load_rich_console()
         log.debug("Logger ready.")
 
         # data
