@@ -6,23 +6,17 @@ other tools such as Tensorboard or MLFlow."""
 import csv
 import json
 import logging
-import os
 import sys
 from abc import abstractmethod
-from datetime import datetime
-from logging import Formatter, LogRecord, StreamHandler
 from pathlib import Path
-from typing import Any, Callable, Literal, TypeVar, Union
+from typing import Literal, TypeVar, Union
 
 import openpyxl
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from openpyxl import Workbook
-from rich.console import Console
 from rich.traceback import install
 
 from .style import LogFileHandler, LogHandler, PreLogHandler, init_display
-
-install(show_locals=False)
 
 FILE_HND_MAX_BYTES = 10_485_760
 FILE_HND_BCK_COUONT = 1

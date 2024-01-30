@@ -1,7 +1,9 @@
-from typing import Literal, Union, Callable, TypeVar, Sequence
-import numpy as np
 import pickle as pk
+from typing import Callable, Literal, Sequence, TypeVar, Union
+
+import numpy as np
 from omegaconf import DictConfig
+
 from ..utils.conf import instantiate, load_class
 
 T_co = TypeVar("T_co", covariant=True)
@@ -24,7 +26,9 @@ def get_course_instance(cfg: DictConfig, log=None, as_list: bool = False):
                 Course(
                     label,
                     instantiate(cfg[label]),
-                    transform=instantiate(cfg[label]["transform"], _partial=True) if "transform" in cfg[label] else None,
+                    transform=instantiate(cfg[label]["transform"], _partial=True)
+                    if "transform" in cfg[label]
+                    else None,
                     cache=cfg[label]["cache"] if "cache" in cfg[label] else False,
                 )
             )
@@ -35,7 +39,9 @@ def get_course_instance(cfg: DictConfig, log=None, as_list: bool = False):
                 Course(
                     label,
                     data=batch_load(cfg[label]["path"], cfg[label].type),
-                    transform=instantiate(cfg[label]["transform"], _partial=True) if "transform" in cfg[label] else None,
+                    transform=instantiate(cfg[label]["transform"], _partial=True)
+                    if "transform" in cfg[label]
+                    else None,
                     cache=cfg[label["cache"]] if "cache" in cfg[label] else False,
                 )
             )
@@ -171,9 +177,10 @@ class CourseBook:
                     )
 
     def load(self) -> None:
-        course_list = get_course_instance(self.conf, as_list=True)
-        for course in course_list:
-            self.__courses[course.label] = course
+        if self.conf:
+            course_list = get_course_instance(self.conf, as_list=True)
+            for course in course_list:
+                self.__courses[course.label] = course
 
     def get(self, label: str):
         return self.__courses[label]
