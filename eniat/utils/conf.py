@@ -62,7 +62,7 @@ def load_conf(path: Union[str, Path, Sequence[Union[str, Path]]] = None) -> Dict
     if path is not None:
         if isinstance(path, str) or isinstance(path, Path):
             path = [path]
-        return OmegaConf.unsafe_merge(conf, recursive_merge_by_path(path))
+        return OmegaConf.unsafe_merge(conf, recursive_merge_by_path(*path))
     else:
         return conf
 
